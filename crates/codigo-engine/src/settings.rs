@@ -60,6 +60,15 @@ pub struct Settings {
     pub check_updates: bool,
     /// Start language servers for the languages that have one on this computer.
     pub language_servers: bool,
+    /// Show who last changed the line the cursor is on, at the end of the line.
+    pub blame: bool,
+    /// The assistant's provider (`anthropic`, `openai`, `ollama` or `custom`). Never a key: those
+    /// live in the system's keyring.
+    pub ai_provider: String,
+    /// The model to ask; empty for the provider's usual one.
+    pub ai_model: String,
+    /// Where the provider is; empty for its usual address.
+    pub ai_base_url: String,
     pub recent_projects: Vec<PathBuf>,
 }
 
@@ -84,6 +93,10 @@ impl Default for Settings {
             reduced_motion: false,
             check_updates: true,
             language_servers: true,
+            blame: false,
+            ai_provider: "anthropic".into(),
+            ai_model: String::new(),
+            ai_base_url: String::new(),
             recent_projects: Vec::new(),
         }
     }
@@ -103,6 +116,8 @@ impl Settings {
             self.language = "auto".into();
         }
         self.recent_projects.truncate(MAX_RECENT);
+        self.ai_model.truncate(200);
+        self.ai_base_url.truncate(500);
     }
 
     /// Put a project at the front of the recent list.
