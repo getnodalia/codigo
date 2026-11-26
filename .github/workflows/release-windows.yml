@@ -1,7 +1,7 @@
 name: Release Windows
 
-# Builds Código's portable Windows x64 zip, starts the app on a clean runner,
-# and only then attaches the zip to a GitHub release.
+# Builds Código's Windows x64 installer (MSI, per-user) and portable zip, installs the MSI and
+# starts the app on a clean runner, and only then attaches the files to a GitHub release.
 #
 # Not signed (no code-signing certificate): SmartScreen warns the first time the files run
 # ("More info" > "Run anyway").
@@ -77,6 +77,12 @@ jobs:
         with:
           key: release-windows
 
+      - name: WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+
       - name: Build and package
         shell: pwsh
         run: pwsh packaging/windows/package.ps1 -Arch x64
@@ -97,7 +103,8 @@ jobs:
           if-no-files-found: error
 
   smoke:
-    # The zip as a user gets it: unpack it, start the app.
+    # The files as a user gets them: install the MSI and start the app, then remove it; unpack
+    # the zip and start the app.
     needs: build
     runs-on: windows-2025
     timeout-minutes: 15
@@ -106,7 +113,34 @@ jobs:
         with:
           name: codigo-windows
           path: dist
-      - name: Start the app
+      - name: Install the MSI, start the app, uninstall it
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          Set-Location dist
+          $msi = (Resolve-Path "codigo-$env:VERSION-windows-x64.msi").Path
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Nodalia\Codigo'
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/l*v', 'install.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 60; throw "install failed: $($p.ExitCode)" }
+          $exe = Join-Path $dir 'codigo.exe'
+          if (-not (Test-Path $exe)) { throw "codigo.exe was not installed into $dir" }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Código.lnk'))) { throw 'the Start menu shortcut is missing' }
+          $installed = (Get-ItemProperty 'HKCU:\Software\Nodalia\Codigo').InstallDir
+          if ($installed.TrimEnd('\') -ne $dir) { throw "InstallDir is '$installed', expected '$dir'" }
+          $p = Start-Process $exe -ArgumentList '--version' -RedirectStandardOutput msi-app.txt -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "installed codigo.exe --version exited with $($p.ExitCode)" }
+          $out = Get-Content msi-app.txt -Raw
+          Write-Output $out
+          if (-not ($out -match [regex]::Escape("codigo $env:VERSION"))) { throw "installed codigo.exe --version does not say $env:VERSION" }
+          # The same MSI again is an in-place upgrade (the update path), not a second install.
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/l*v', 'upgrade.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content upgrade.log -Tail 60; throw "upgrade failed: $($p.ExitCode)" }
+          $p = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/l*v', 'uninstall.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content uninstall.log -Tail 60; throw "uninstall failed: $($p.ExitCode)" }
+          if (Test-Path $exe) { throw 'codigo.exe is still there after uninstalling' }
+
+      - name: Start the app from the zip
         shell: pwsh
         env:
           VERSION: ${{ needs.build.outputs.version }}
