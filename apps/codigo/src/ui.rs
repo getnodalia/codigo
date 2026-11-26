@@ -284,6 +284,7 @@ fn top_bar(
                     (tr("Open folder…"), Cmd::OpenFolder),
                     (tr("Open file…"), Cmd::OpenFile),
                     (tr("New file"), Cmd::NewFile),
+                    (tr("Clone repository…"), Cmd::CloneRepository),
                 ] {
                     if ui.button(label).clicked() {
                         acts.push(Act::Run(cmd));
@@ -458,6 +459,8 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             (Panel::Search, "search", tr("Search")),
             (Panel::Quality, "shield-check", tr("Quality")),
             (Panel::Problems, "warning", tr("Problems")),
+            (Panel::Git, "branch", tr("Source control")),
+            (Panel::GitHub, "cloud", tr("GitHub")),
             (Panel::Debug, "bug", tr("Debug")),
         ] {
             if icon_button(ui, look, glyph, label, app.panel == panel).clicked() {
@@ -479,6 +482,8 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                 Panel::Quality => tr("Quality"),
                 Panel::Problems => tr("Problems"),
                 Panel::Debug => tr("Debug"),
+                Panel::Git => tr("Source control"),
+                Panel::GitHub => tr("GitHub"),
             })
             .strong()
             .size(font_size::SMALL)
@@ -493,6 +498,14 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             if let Some((path, line)) = crate::problems_ui::panel(ui, app, look) {
                 acts.push(Act::OpenAt { path, line });
             }
+        }
+        Panel::Git => {
+            if let Some(path) = crate::vcs_ui::panel(ui, app, look).open {
+                acts.push(Act::OpenAt { path, line: 0 });
+            }
+        }
+        Panel::GitHub => {
+            crate::github_ui::panel(ui, app, look);
         }
         Panel::Debug => {
             if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {
@@ -843,11 +856,15 @@ fn search_panel(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
 // --- Editor island -----------------------------------------------------------------------------
 
 fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
-    if app.tabs.is_empty() {
+    if app.tabs.is_empty() && app.opening.is_empty() {
         welcome(ui, app, look, acts);
         return;
     }
     tab_strip(ui, app, look, acts);
+    if app.tabs.is_empty() {
+        opening_page(ui, app, look);
+        return;
+    }
     let conflict = app.active_doc().is_some_and(|d| d.conflict);
     if conflict {
         banner(
@@ -953,12 +970,55 @@ fn tab_strip(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                             let selected = i == app.active;
                             file_tab(ui, look, &name, dirty, selected, i, acts, selected);
                         }
+                        for job in &app.opening {
+                            let name = job
+                                .path
+                                .file_name()
+                                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                            opening_tab(ui, look, &name);
+                        }
                     });
                 });
             if small_icon_button(ui, look, "plus", tr("New file"), false).clicked() {
                 acts.push(Act::Run(Cmd::NewFile));
             }
         },
+    );
+}
+
+/// The stand-in for a tab whose file is still being read.
+fn opening_tab(ui: &mut Ui, look: &Look, name: &str) {
+    let p = &look.palette;
+    let galley = ui.painter().layout_no_wrap(
+        name.to_owned(),
+        FontId::proportional(font_size::BODY),
+        color(p.text_tertiary),
+    );
+    let (rect, _) = ui.allocate_exact_size(vec2(galley.size().x + 44.0, 26.0), Sense::hover());
+    let spinner =
+        Rect::from_center_size(pos2(rect.left() + 18.0, rect.center().y), vec2(14.0, 14.0));
+    ui.put(spinner, egui::Spinner::new().size(14.0));
+    ui.painter().galley(
+        pos2(rect.left() + 32.0, rect.center().y - galley.size().y / 2.0),
+        galley,
+        color(p.text_tertiary),
+    );
+}
+
+/// What the editor area shows while the only file being opened is still being read.
+fn opening_page(ui: &mut Ui, app: &App, look: &Look) {
+    let name = app.opening.first().map_or_else(String::new, |o| {
+        o.path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+    });
+    let rect = ui.available_rect_before_wrap();
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        crate::i18n::trf("Opening {}…", &[&name]),
+        FontId::proportional(font_size::BODY),
+        color(look.palette.text_tertiary),
     );
 }
 
@@ -1195,7 +1255,7 @@ fn welcome(ui: &mut Ui, app: &App, look: &Look, acts: &mut Vec<Act>) {
             );
             ui.add_space(14.0);
             ui.horizontal(|ui| {
-                let total = 120.0 + 100.0 + 120.0 + 16.0;
+                let total = 120.0 + 100.0 + 120.0 + 150.0 + 24.0;
                 ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
                 if cr::primary_button_min(ui, look, tr("Open folder…"), true, 120.0).clicked() {
                     acts.push(Act::Run(Cmd::OpenFolder));
@@ -1205,6 +1265,11 @@ fn welcome(ui: &mut Ui, app: &App, look: &Look, acts: &mut Vec<Act>) {
                 }
                 if cr::secondary_button_min(ui, look, tr("New file"), true, 120.0).clicked() {
                     acts.push(Act::Run(Cmd::NewFile));
+                }
+                if cr::secondary_button_min(ui, look, tr("Clone repository…"), true, 150.0)
+                    .clicked()
+                {
+                    acts.push(Act::Run(Cmd::CloneRepository));
                 }
             });
             if !app.settings.recent_projects.is_empty() {

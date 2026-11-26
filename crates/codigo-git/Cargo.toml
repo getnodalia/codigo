@@ -1,0 +1,19 @@
+[package]
+name = "codigo-git"
+description = "Código's version control: stage, commit, branches, push, pull and clone, by running git. No interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -183,13 +183,20 @@ impl Document {
         }
     }
 
-    /// Bring the syntax tree up to date with the text. Cheap when nothing changed; the editor
-    /// calls it before drawing.
-    pub fn ensure_parsed(&mut self) {
+    /// Bring the syntax tree up to date with the text without waiting: a big text is parsed on a
+    /// worker thread. Cheap when nothing changed; the editor calls it before drawing. Returns
+    /// true while the colours are still catching up, so the caller should draw again soon.
+    pub fn ensure_parsed(&mut self) -> bool {
+        match self.syntax.as_mut() {
+            Some(s) => s.refresh(self.buffer.rope()),
+            None => false,
+        }
+    }
+
+    /// Parse now and wait for it, for callers that need the finished tree (tests, tools).
+    pub fn parse_now(&mut self) {
         if let Some(s) = self.syntax.as_mut() {
-            if s.is_stale() {
-                s.reparse(self.buffer.rope());
-            }
+            s.reparse(self.buffer.rope());
         }
     }
 

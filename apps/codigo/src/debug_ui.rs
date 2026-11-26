@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use codigo_dap::{
-    adapters_for, prepare, Command, Debugger, LaunchSpec, ScopeVars, StopInfo, Update, Variable,
+    adapters_for, prepare, Command, Debugger, LaunchSpec, Prepare, ScopeVars, StopInfo, Update,
+    Variable,
 };
 use egui::{CornerRadius, FontId, RichText, ScrollArea, Sense, TextEdit, Ui};
 use nodalia_theme::creator::Look;
@@ -267,7 +268,7 @@ pub fn start(app: &mut App) {
         app.toast(tr("A debugging session is already running."));
         return;
     }
-    let Some(root) = app.project.as_ref().map(|p| p.root.clone()) else {
+    let Some(root) = crate::setup_ui::work_root(app) else {
         app.toast(tr("Open a folder first."));
         return;
     };
@@ -297,21 +298,29 @@ pub fn start(app: &mut App) {
     let spawned = std::thread::Builder::new()
         .name("codigo-debug-prepare".into())
         .spawn(move || {
-            let spec = prepare(&root, active.as_deref()).and_then(|target| {
-                let adapter = adapters_for(target.language)
-                    .map_err(|m| m.to_string())?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| format!("no debugger found for {}", target.language))?;
-                Ok(LaunchSpec {
-                    adapter,
-                    program: target.program,
-                    args: Vec::new(),
-                    cwd: target.cwd,
-                    breakpoints,
-                })
-            });
-            let _ = tx.send(Msg::DebugSpec(serial, spec));
+            let msg = match prepare(&root, active.as_deref()) {
+                Err(Prepare::Unknown(note)) => Msg::DebugAsk(serial, note),
+                Err(Prepare::Failed(e)) => Msg::DebugSpec(serial, Err(e)),
+                Ok(target) => {
+                    let spec = adapters_for(target.language)
+                        .map_err(|m| m.to_string())
+                        .and_then(|found| {
+                            found
+                                .into_iter()
+                                .next()
+                                .ok_or_else(|| format!("no debugger found for {}", target.language))
+                        })
+                        .map(|adapter| LaunchSpec {
+                            adapter,
+                            program: target.program,
+                            args: target.args,
+                            cwd: target.cwd,
+                            breakpoints,
+                        });
+                    Msg::DebugSpec(serial, spec)
+                }
+            };
+            let _ = tx.send(msg);
             ctx.request_repaint();
         });
     if spawned.is_err() {
@@ -338,6 +347,19 @@ pub fn launch(app: &mut App, serial: u64, spec: Result<LaunchSpec, String>) {
             app.toast(e);
         }
     }
+}
+
+/// Nothing recognisable to debug: ask which program, and start once it is saved.
+pub fn ask(app: &mut App, serial: u64, note: String) {
+    if serial != app.debug.serial || app.debug.phase != Phase::Preparing {
+        return;
+    }
+    app.debug.reset();
+    let Some(root) = crate::setup_ui::work_root(app) else {
+        return;
+    };
+    app.overlay =
+        crate::overlays::Overlay::DebugSetup(crate::setup_ui::DebugSetup::new(&root, note));
 }
 
 pub fn stop(app: &mut App) {

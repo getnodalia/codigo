@@ -22,4 +22,4 @@ pub mod target;
 pub use adapters::{adapter_for, adapters_for, Adapter, AdapterKind, Missing};
 pub use client::{Client, ClientError, Incoming, Pending};
 pub use session::{Command, Debugger, Frame, LaunchSpec, ScopeVars, StopInfo, Update, Variable};
-pub use target::{prepare, Target};
+pub use target::{language_of, prepare, save, saved, split_args, Prepare, Saved, Target};

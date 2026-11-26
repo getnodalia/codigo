@@ -2,7 +2,7 @@
 //! The terminal panel under the editor: shells and the run console are the same thing, a program
 //! in a pseudo-terminal, drawn here as a grid of cells.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use codigo_engine::{tasks, Cmd, TaskKind};
@@ -15,6 +15,7 @@ use nodalia_theme::for_egui::color;
 
 use crate::app::App;
 use crate::i18n::{tr, trf};
+use crate::overlays::Overlay;
 use crate::widgets::small_icon_button;
 
 const HEADER_H: f32 = 30.0;
@@ -121,15 +122,17 @@ pub fn close_active(app: &mut App) {
 
 /// Run the project's task of this kind in the console.
 pub fn run_task(app: &mut App, ctx: &egui::Context, kind: TaskKind) {
-    let Some(project) = app.project.as_ref() else {
+    let Some(root) = crate::setup_ui::work_root(app) else {
         app.toast(tr("Open a folder to run its tasks."));
         return;
     };
-    let found = tasks::detect(&project.root);
-    let Some(task) = tasks::pick(&found, kind) else {
-        app.toast(tr(
-            "No way to run this project was found. Use the terminal.",
-        ));
+    let active = app
+        .active_doc()
+        .and_then(|d| d.path())
+        .map(Path::to_path_buf);
+    let Some(task) = tasks::resolve(&root, active.as_deref(), kind) else {
+        // Nothing recognised: ask once and remember the answer.
+        app.overlay = Overlay::RunSetup(crate::setup_ui::RunSetup::new(kind));
         return;
     };
     // Running the same task again replaces its console rather than stacking another.
@@ -144,7 +147,7 @@ pub fn run_task(app: &mut App, ctx: &egui::Context, kind: TaskKind) {
     let spec = Spec {
         program: task.program.clone(),
         args: task.args.clone(),
-        cwd: project.root.clone(),
+        cwd: root,
         env: Vec::new(),
     };
     let label = task.label.clone();

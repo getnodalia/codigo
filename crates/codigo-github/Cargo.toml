@@ -1,0 +1,27 @@
+[package]
+name = "codigo-github"
+description = "Código's GitHub client: sign in, repositories, pull requests, issues and reviews. No interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+serde_json.workspace = true
+thiserror.workspace = true
+ureq = { version = "3.5", features = ["platform-verifier", "json"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+
+[lints]
+workspace = true

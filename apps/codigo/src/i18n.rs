@@ -174,6 +174,8 @@ mod tests {
             codigo_engine::Category::View,
             codigo_engine::Category::Go,
             codigo_engine::Category::Run,
+            codigo_engine::Category::Git,
+            codigo_engine::Category::GitHub,
             codigo_engine::Category::Nodalia,
             codigo_engine::Category::Help,
         ] {
