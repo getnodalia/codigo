@@ -19,8 +19,16 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
 - **Errors as you type.** With a language server installed (rust-analyzer, pyright, gopls,
   clangd, typescript-language-server and others), Código underlines what it reports, shows the
   message under the pointer and counts errors and warnings in the status bar. It never installs a
-  server for you, and the setting can be turned off in Preferences. Hover, completion and go to
-  definition are not there yet.
+  server for you, and the setting can be turned off in Preferences. Hover (`Ctrl+Shift+Space`),
+  completion (`Ctrl+Space`, and as you type) and go to definition (`F12`) work too; references,
+  rename and formatting are not there yet.
+- **A terminal and a run console.** `Ctrl+\`` opens a real terminal under the editor, with tabs,
+  colours, history and the project folder as its working directory. `F5` runs the project
+  (`cargo run`, `npm start`, `go run .`, `python main.py` and more, chosen from what the folder
+  contains) in a tab of its own, and Build, Test and Check are in the Run menu. A
+  `path:line:column` in the output is a link: click it to open that place.
+- **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
+  the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
   in colour, quick open by fuzzy file name (`Ctrl+P`), search across the project (`Ctrl+Shift+F`)
   and a command palette (`Ctrl+Shift+P`) that reaches every command.
@@ -47,7 +55,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 ## Layout
 
 `crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
-(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-workspace` (folders, fuzzy matching, project search,
+(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-workspace` (folders, fuzzy matching, project search,
 git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
 app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
 

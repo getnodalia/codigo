@@ -26,6 +26,7 @@ what does not exist yet.
 | `crates/codigo-text` | The buffer (ropey, char offsets), selections and multi-cursor, edits, undo history, motions, search, encodings. No I/O beyond decoding bytes |
 | `crates/codigo-syntax` | Languages, tree-sitter parsing and highlight scopes |
 | `crates/codigo-lsp` | The language server client: JSON-RPC framing, UTF-16 positions, the off-thread `Client`, the server registry and spawning. No UI, no engine types |
+| `crates/codigo-term` | The terminal: a program in a pseudo-terminal, the screen it draws, key encoding and `path:line:column` links. No UI |
 | `crates/codigo-workspace` | Folder walking with ignore rules, the tree, fuzzy matching, project search, git status |
 | `crates/codigo-engine` | Documents (buffer + syntax + file), commands, settings, session. No UI |
 | `apps/codigo` | The egui app: `app.rs` (state and frame loop), `ui.rs` (window), `editor.rs`, `explorer.rs`, `overlays.rs` (palette, quick open, preferences, About…), `menu.rs`, `linux_menu.rs`, `spanish.rs`, `i18n.rs` |

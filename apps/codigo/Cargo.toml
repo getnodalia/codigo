@@ -19,6 +19,7 @@ unicode-width.workspace = true
 codigo-syntax.workspace = true
 codigo-workspace.workspace = true
 codigo-engine.workspace = true
+codigo-term.workspace = true
 eframe.workspace = true
 egui.workspace = true
 nodalia-theme.workspace = true

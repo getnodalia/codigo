@@ -160,6 +160,7 @@ mod tests {
             codigo_engine::Category::Selection,
             codigo_engine::Category::View,
             codigo_engine::Category::Go,
+            codigo_engine::Category::Run,
             codigo_engine::Category::Help,
         ] {
             if !has(cat.label()) {

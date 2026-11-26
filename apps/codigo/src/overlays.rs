@@ -649,6 +649,7 @@ fn shortcuts(ctx: &egui::Context, look: &Look, mut filter: String) -> Shown {
                     Category::Selection,
                     Category::View,
                     Category::Go,
+                    Category::Run,
                     Category::Help,
                 ] {
                     let rows: Vec<&Cmd> = Cmd::ALL

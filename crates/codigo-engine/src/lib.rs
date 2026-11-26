@@ -20,6 +20,7 @@ pub mod lsp;
 pub mod paths;
 pub mod session;
 pub mod settings;
+pub mod tasks;
 
 pub use codigo_lsp::CompletionItem;
 pub use codigo_lsp::Severity;
@@ -31,3 +32,4 @@ pub use lsp::{
 };
 pub use session::SessionState;
 pub use settings::{Appearance, AutoSave, Settings};
+pub use tasks::{Task, TaskKind};

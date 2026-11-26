@@ -228,6 +228,9 @@ const fn alt(key: Key) -> Option<Shortcut> {
 const fn alt_shift(key: Key) -> Option<Shortcut> {
     Some(Shortcut::new(false, true, true, key))
 }
+const fn shift(key: Key) -> Option<Shortcut> {
+    Some(Shortcut::new(false, true, false, key))
+}
 const fn plain(key: Key) -> Option<Shortcut> {
     Some(Shortcut::new(false, false, false, key))
 }
@@ -241,6 +244,7 @@ pub enum Category {
     Selection,
     View,
     Go,
+    Run,
     Help,
 }
 
@@ -253,6 +257,7 @@ impl Category {
             Category::Selection => "Selection",
             Category::View => "View",
             Category::Go => "Go",
+            Category::Run => "Run",
             Category::Help => "Help",
         }
     }
@@ -332,6 +337,9 @@ commands! {
 
     CommandPalette => ("view.commandPalette", "Command palette…", View, ctrl_shift(Key::P)),
     ToggleSidebar => ("view.toggleSidebar", "Show or hide the sidebar", View, ctrl(Key::B)),
+    ToggleTerminal => ("view.toggleTerminal", "Show or hide the terminal", View, ctrl(Key::Backtick)),
+    NewTerminal => ("terminal.new", "New terminal", View, ctrl_shift(Key::Backtick)),
+    CloseTerminal => ("terminal.close", "Close the terminal", View, NONE),
     ToggleWordWrap => ("view.toggleWordWrap", "Word wrap", View, alt(Key::Z)),
     ToggleWhitespace => ("view.toggleWhitespace", "Show whitespace", View, NONE),
     ZoomIn => ("view.zoomIn", "Zoom in", View, ctrl(Key::Plus)),
@@ -340,6 +348,12 @@ commands! {
     FocusEditor => ("view.focusEditor", "Focus editor", View, NONE),
     FocusExplorer => ("view.focusExplorer", "Focus explorer", View, ctrl_shift(Key::E)),
     ChangeLanguage => ("view.changeLanguage", "Change language mode…", View, NONE),
+
+    RunProject => ("run.start", "Run the project", Run, plain(Key::F5)),
+    BuildProject => ("run.build", "Build the project", Run, ctrl_shift(Key::B)),
+    TestProject => ("run.test", "Run the tests", Run, NONE),
+    CheckProject => ("run.check", "Check the code", Run, NONE),
+    StopRun => ("run.stop", "Stop the running program", Run, shift(Key::F5)),
 
     QuickOpen => ("go.quickOpen", "Go to file…", Go, ctrl(Key::P)),
     GoToLine => ("go.line", "Go to line…", Go, ctrl(Key::G)),
