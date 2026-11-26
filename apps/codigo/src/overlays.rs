@@ -47,6 +47,10 @@ pub enum Overlay {
     Confirm(Confirm),
     RunSetup(crate::setup_ui::RunSetup),
     DebugSetup(crate::setup_ui::DebugSetup),
+    Diff(crate::vcs_ui::DiffView),
+    Branch(crate::vcs_ui::BranchSetup),
+    Clone(crate::github_ui::CloneSetup),
+    Item(Box<crate::github_ui::ItemView>),
 }
 
 impl Overlay {
@@ -263,6 +267,10 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::Confirm(c) => confirm(ctx, app, look, c),
         Overlay::RunSetup(s) => crate::setup_ui::run_setup(ctx, app, look, s),
         Overlay::DebugSetup(s) => crate::setup_ui::debug_setup(ctx, app, look, s),
+        Overlay::Diff(v) => crate::vcs_ui::diff_overlay(ctx, app, look, v),
+        Overlay::Branch(s) => crate::vcs_ui::branch_overlay(ctx, app, look, s),
+        Overlay::Clone(s) => crate::github_ui::clone_overlay(ctx, app, look, s),
+        Overlay::Item(v) => crate::github_ui::item_overlay(ctx, app, look, v),
     };
     // A command run from inside an overlay may have opened another one: keep that.
     if matches!(app.overlay, Overlay::None) && !close {
@@ -656,6 +664,8 @@ fn shortcuts(ctx: &egui::Context, look: &Look, mut filter: String) -> Shown {
                     Category::View,
                     Category::Go,
                     Category::Run,
+                    Category::Git,
+                    Category::GitHub,
                     Category::Nodalia,
                     Category::Help,
                 ] {

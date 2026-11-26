@@ -245,6 +245,8 @@ pub enum Category {
     View,
     Go,
     Run,
+    Git,
+    GitHub,
     Nodalia,
     Help,
 }
@@ -259,6 +261,8 @@ impl Category {
             Category::View => "View",
             Category::Go => "Go",
             Category::Run => "Run",
+            Category::Git => "Git",
+            Category::GitHub => "GitHub",
             Category::Nodalia => "Nodalia",
             Category::Help => "Help",
         }
@@ -366,6 +370,20 @@ commands! {
     DebugStepOut => ("debug.stepOut", "Step out", Run, shift(Key::F11)),
     ToggleBreakpoint => ("debug.toggleBreakpoint", "Toggle breakpoint", Run, plain(Key::F9)),
     AnalyzeProject => ("quality.analyze", "Analyze the code quality and security", Run, ctrl_shift(Key::Y)),
+
+    GitShow => ("git.show", "Show source control", Git, ctrl_shift(Key::G)),
+    GitCommit => ("git.commit", "Commit the staged changes", Git, NONE),
+    GitStageAll => ("git.stageAll", "Stage all changes", Git, NONE),
+    GitPull => ("git.pull", "Pull", Git, NONE),
+    GitPush => ("git.push", "Push", Git, NONE),
+    GitFetch => ("git.fetch", "Fetch", Git, NONE),
+    GitSwitchBranch => ("git.switchBranch", "Switch or create a branch…", Git, NONE),
+    CloneRepository => ("github.clone", "Clone a repository…", GitHub, NONE),
+    GitHubShow => ("github.show", "Show GitHub pull requests and issues", GitHub, ctrl_shift(Key::H)),
+    GitHubSignIn => ("github.signIn", "Sign in to GitHub…", GitHub, NONE),
+    GitHubSignInCli => ("github.signInCli", "Sign in with the GitHub CLI", GitHub, NONE),
+    GitHubSignOut => ("github.signOut", "Sign out of GitHub", GitHub, NONE),
+    GitHubRefresh => ("github.refresh", "Refresh GitHub", GitHub, NONE),
 
     NewNodaliaApp => ("nodalia.newApp", "New Nodalia app…", Nodalia, NONE),
 

@@ -146,6 +146,32 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(AnalyzeProject),
             ]),
         ),
+        (
+            tr("Git"),
+            items(&[
+                some(GitShow),
+                some(GitSwitchBranch),
+                None,
+                some(GitStageAll),
+                some(GitCommit),
+                None,
+                some(GitFetch),
+                some(GitPull),
+                some(GitPush),
+            ]),
+        ),
+        (
+            tr("GitHub"),
+            items(&[
+                some(CloneRepository),
+                some(GitHubShow),
+                None,
+                some(GitHubSignIn),
+                some(GitHubSignInCli),
+                some(GitHubSignOut),
+                some(GitHubRefresh),
+            ]),
+        ),
         (tr("Nodalia"), items(&[some(NewNodaliaApp)])),
     ]
 }

@@ -458,6 +458,8 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             (Panel::Search, "search", tr("Search")),
             (Panel::Quality, "shield-check", tr("Quality")),
             (Panel::Problems, "warning", tr("Problems")),
+            (Panel::Git, "branch", tr("Source control")),
+            (Panel::GitHub, "cloud", tr("GitHub")),
             (Panel::Debug, "bug", tr("Debug")),
         ] {
             if icon_button(ui, look, glyph, label, app.panel == panel).clicked() {
@@ -479,6 +481,8 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                 Panel::Quality => tr("Quality"),
                 Panel::Problems => tr("Problems"),
                 Panel::Debug => tr("Debug"),
+                Panel::Git => tr("Source control"),
+                Panel::GitHub => tr("GitHub"),
             })
             .strong()
             .size(font_size::SMALL)
@@ -493,6 +497,14 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             if let Some((path, line)) = crate::problems_ui::panel(ui, app, look) {
                 acts.push(Act::OpenAt { path, line });
             }
+        }
+        Panel::Git => {
+            if let Some(path) = crate::vcs_ui::panel(ui, app, look).open {
+                acts.push(Act::OpenAt { path, line: 0 });
+            }
+        }
+        Panel::GitHub => {
+            crate::github_ui::panel(ui, app, look);
         }
         Panel::Debug => {
             if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {

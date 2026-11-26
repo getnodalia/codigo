@@ -260,6 +260,19 @@ impl Repo {
         run::git(&self.root, &["fetch", "--quiet", "--prune"], auth).map(drop)
     }
 
+    /// Fetch one ref from `origin` into a local branch, e.g. `pull/12/head:codigo-pr-12`.
+    pub fn fetch_ref(&self, auth: &Auth, spec: &str) -> Result<()> {
+        if spec.starts_with('-') || spec.contains(char::is_whitespace) {
+            return Err(Error::Failed(format!("`{spec}` is not a valid ref")));
+        }
+        run::git(
+            &self.root,
+            &["fetch", "--quiet", "--force", "origin", spec],
+            auth,
+        )
+        .map(drop)
+    }
+
     /// Fetch and fast-forward; never makes a merge commit by itself.
     pub fn pull(&self, auth: &Auth) -> Result<()> {
         run::git(&self.root, &["pull", "--quiet", "--ff-only"], auth).map(drop)

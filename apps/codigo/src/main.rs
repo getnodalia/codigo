@@ -21,6 +21,7 @@ mod debug_ui;
 mod editor;
 mod explorer;
 mod file_icons;
+mod github_ui;
 mod glyphs;
 mod i18n;
 mod icon;
@@ -39,6 +40,7 @@ mod syntax_theme;
 mod terminal_ui;
 mod ui;
 mod updates;
+mod vcs_ui;
 mod widgets;
 
 use std::process::ExitCode;

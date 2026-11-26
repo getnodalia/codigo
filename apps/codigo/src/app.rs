@@ -39,6 +39,10 @@ pub enum Msg {
     DebugAsk(u64, String),
     /// A big file was read off the window thread.
     Opened(Opening, Result<Document, OpenError>),
+    /// Git ran on a worker thread.
+    Vcs(crate::vcs_ui::GitMsg),
+    /// GitHub answered on a worker thread.
+    Gh(crate::github_ui::GhMsg),
 }
 
 /// Files above this size are read on a worker thread; smaller ones open before the next frame.
@@ -70,6 +74,8 @@ pub enum Panel {
     Quality,
     Problems,
     Debug,
+    Git,
+    GitHub,
 }
 
 /// The find bar's state.
@@ -167,6 +173,10 @@ pub struct App {
     pub term: crate::terminal_ui::TermPanel,
     /// The debugger: breakpoints, and the session when there is one.
     pub debug: crate::debug_ui::DebugPanel,
+    /// Source control: the repository the open folder is in.
+    pub vcs: crate::vcs_ui::GitPanel,
+    /// GitHub: the account, and the lists the panel shows.
+    pub gh: crate::github_ui::GithubPanel,
     /// A language-server question waiting for its answer.
     pub query: Option<crate::lsp_ui::InFlight>,
     /// The hover or completion popup next to the caret.
@@ -246,6 +256,8 @@ impl App {
             lsp,
             term: crate::terminal_ui::TermPanel::default(),
             debug: crate::debug_ui::DebugPanel::default(),
+            vcs: crate::vcs_ui::GitPanel::default(),
+            gh: crate::github_ui::GithubPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
             panel: Panel::Explorer,
@@ -278,6 +290,7 @@ impl App {
             ignore_close: false,
         };
         app.apply_appearance(&cc.egui_ctx);
+        crate::github_ui::init(&mut app);
         if app.settings.check_updates {
             app.updates.start(false);
         }
@@ -726,7 +739,10 @@ impl App {
         });
         self.sidebar_visible = true;
         self.panel = Panel::Explorer;
+        self.vcs = crate::vcs_ui::GitPanel::default();
+        self.gh.repo = None;
         self.refresh_git();
+        crate::vcs_ui::refresh(self);
         self.list_files();
         self.session_dirty = true;
     }
@@ -866,6 +882,8 @@ impl App {
                     }
                 }
                 Msg::Opened(job, result) => self.opened(job, result),
+                Msg::Vcs(msg) => crate::vcs_ui::on_msg(self, msg),
+                Msg::Gh(msg) => crate::github_ui::on_msg(self, msg),
                 Msg::Marks(path, marks) => {
                     for tab in &mut self.tabs {
                         if tab.doc.path() == Some(path.as_path()) {
@@ -1126,6 +1144,19 @@ impl App {
                 self.sidebar_visible = true;
                 self.panel = Panel::Debug;
             }
+            GitShow => crate::vcs_ui::show(self),
+            GitCommit => crate::vcs_ui::commit(self),
+            GitStageAll => crate::vcs_ui::stage_all(self),
+            GitPull => crate::vcs_ui::pull(self),
+            GitPush => crate::vcs_ui::push(self),
+            GitFetch => crate::vcs_ui::fetch(self),
+            GitSwitchBranch => crate::vcs_ui::open_branches(self),
+            GitHubShow => crate::github_ui::show(self),
+            GitHubSignIn => crate::github_ui::sign_in_device(self),
+            GitHubSignInCli => crate::github_ui::sign_in_cli(self),
+            GitHubSignOut => crate::github_ui::sign_out(self),
+            GitHubRefresh => crate::github_ui::refresh(self),
+            CloneRepository => crate::github_ui::open_clone(self),
             NextTab => {
                 if !self.tabs.is_empty() {
                     self.active = (self.active + 1) % self.tabs.len();

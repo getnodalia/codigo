@@ -662,6 +662,8 @@ version = "0.3.0"
 dependencies = [
  "codigo-dap",
  "codigo-engine",
+ "codigo-git",
+ "codigo-github",
  "codigo-nodalia",
  "codigo-quality",
  "codigo-syntax",
