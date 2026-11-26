@@ -1093,6 +1093,50 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
             let Some(doc) = app.active_doc() else {
                 return;
             };
+            if let Some(path) = doc.path() {
+                let counts = app.lsp.counts(path);
+                if counts.errors + counts.warnings > 0 {
+                    let tip = trf(
+                        "{} errors, {} warnings",
+                        &[&counts.errors.to_string(), &counts.warnings.to_string()],
+                    );
+                    ui.label(
+                        RichText::new(format!("✕ {}", counts.errors))
+                            .size(font_size::SMALL)
+                            .color(color(p.status_danger_fg)),
+                    )
+                    .on_hover_text(tip.clone());
+                    ui.label(
+                        RichText::new(format!("▲ {}", counts.warnings))
+                            .size(font_size::SMALL)
+                            .color(color(p.status_warning_fg)),
+                    )
+                    .on_hover_text(tip);
+                }
+            }
+            if let Some(status) = app.lsp.status_for(doc.language().id) {
+                use codigo_engine::ServerState;
+                let name = status.name.to_owned();
+                match status.state {
+                    ServerState::Starting => {
+                        ui.label(small(trf("{} is starting…", &[&name])));
+                    }
+                    ServerState::Ready(None) => {
+                        ui.label(small(name));
+                    }
+                    ServerState::Ready(Some(progress)) => {
+                        ui.label(small(format!("{name} · {progress}")));
+                    }
+                    ServerState::Missing(install) => {
+                        ui.label(small(trf("{} is not installed", &[&name])))
+                            .on_hover_text(trf("Install it with: {}", &[install]));
+                    }
+                    ServerState::Failed(why) => {
+                        ui.label(small(trf("{} stopped", &[&name])))
+                            .on_hover_text(why);
+                    }
+                }
+            }
             trailing(ui, |ui| {
                 ui.add_space(6.0);
                 let language = ui

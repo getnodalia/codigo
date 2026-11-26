@@ -16,11 +16,14 @@
 
 pub mod command;
 pub mod document;
+pub mod lsp;
 pub mod paths;
 pub mod session;
 pub mod settings;
 
+pub use codigo_lsp::Severity;
 pub use command::{Category, Cmd, Key, Shortcut};
 pub use document::{detect_indent, DocId, Document, OpenError, SaveError};
+pub use lsp::{Counts, Hub, Mark, ServerState, ServerStatus};
 pub use session::SessionState;
 pub use settings::{Appearance, AutoSave, Settings};

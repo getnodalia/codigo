@@ -56,6 +56,8 @@ pub struct Settings {
     pub high_contrast: bool,
     pub reduced_motion: bool,
     pub check_updates: bool,
+    /// Start language servers for the languages that have one on this computer.
+    pub language_servers: bool,
     pub recent_projects: Vec<PathBuf>,
 }
 
@@ -78,6 +80,7 @@ impl Default for Settings {
             high_contrast: false,
             reduced_motion: false,
             check_updates: true,
+            language_servers: true,
             recent_projects: Vec::new(),
         }
     }

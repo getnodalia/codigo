@@ -16,6 +16,11 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
 - **Syntax highlighting for 15 languages** through tree-sitter: Rust, Python, JavaScript,
   TypeScript, JSON, TOML, Markdown, Bash, C, C++, Go, Java, HTML, CSS and YAML. Other files open as
   plain text, and the status bar lets you pick a language by hand.
+- **Errors as you type.** With a language server installed (rust-analyzer, pyright, gopls,
+  clangd, typescript-language-server and others), Código underlines what it reports, shows the
+  message under the pointer and counts errors and warnings in the status bar. It never installs a
+  server for you, and the setting can be turned off in Preferences. Hover, completion and go to
+  definition are not there yet.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
   in colour, quick open by fuzzy file name (`Ctrl+P`), search across the project (`Ctrl+Shift+F`)
   and a command palette (`Ctrl+Shift+P`) that reaches every command.
@@ -42,7 +47,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 ## Layout
 
 `crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
-(languages and highlighting), `crates/codigo-workspace` (folders, fuzzy matching, project search,
+(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-workspace` (folders, fuzzy matching, project search,
 git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
 app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
 

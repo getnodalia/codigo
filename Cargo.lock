@@ -626,6 +626,7 @@ dependencies = [
 name = "codigo-engine"
 version = "0.1.0-dev"
 dependencies = [
+ "codigo-lsp",
  "codigo-syntax",
  "codigo-text",
  "codigo-workspace",

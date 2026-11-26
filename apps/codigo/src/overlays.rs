@@ -588,6 +588,13 @@ fn preferences(ctx: &egui::Context, app: &mut App, look: &Look) -> Shown {
                     }
                 });
 
+                section(ui, look, tr("Language servers"));
+                changed |= toggle_row(
+                    ui,
+                    tr("Use language servers for diagnostics when one is installed"),
+                    &mut s.language_servers,
+                );
+
                 section(ui, look, tr("Updates"));
                 changed |= toggle_row(
                     ui,
