@@ -5,8 +5,8 @@ Every asset in this repository, with its author, source and licence. Code is `MI
 
 | Path | What | Author | Source | Licence |
 |---|---|---|---|---|
-| `assets/icons/codigo-portrait-1024.png` | App icon artwork: Ada Lovelace (1815–1852), who wrote the first published program, cut out in black and white on Código's green | Nodalia, from the 1840 portrait of Ada Lovelace by Alfred Edward Chalon | [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Ada_Lovelace); made with nodalia-design `tools/app-portrait` | Portrait: public domain (the painter died in 1860). Artwork: MIT OR Apache-2.0 |
-| `assets/icons/hicolor/*/apps/dev.danielmiguelt.Codigo.png` | App icon at each size (rounded tile of the artwork above) | Nodalia | made from the artwork above | MIT OR Apache-2.0 |
+| `assets/icons/codigo-portrait-1024.png`, `assets/icons/codigo*.svg`, `assets/icons/codigo-1024.png` | App icon artwork: Grace Hopper (1906–1992), who wrote the first compiler, cut out in black and white on Código's green | Nodalia, from the official U.S. Navy portrait of 1984 by James S. Davis | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Commodore_Grace_M._Hopper,_USN_(covered).jpg); made with nodalia-design `tools/app-portrait` | Portrait: public domain (a work of the U.S. federal government). Artwork: MIT OR Apache-2.0 |
+| `assets/icons/hicolor/*/apps/dev.danielmiguelt.Codigo.*` | App icon at each size, on the Colloid application grid | Nodalia | made from the artwork above with nodalia-design `tools/app-portrait/icon-set.py` | MIT OR Apache-2.0 |
 
 Interface icons, colours and the window controls are drawn by `nodalia-theme`, from
 [nodalia-design](https://github.com/getnodalia/nodalia-design) (MIT). Interface text uses egui's

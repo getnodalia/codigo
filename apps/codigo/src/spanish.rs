@@ -93,7 +93,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("High contrast", "Alto contraste"),
     ("Highlight the current line", "Resaltar la línea actual"),
     ("Highlighting", "Resaltado"),
-    ("Icon: Ada Lovelace, from Alfred Edward Chalon's 1840 portrait (public domain).", "Icono: Ada Lovelace, de un retrato de Alfred Edward Chalon de 1840 (dominio público)."),
+    ("Icon: Grace Hopper, from the official 1984 U.S. Navy portrait (public domain).", "Icono: Grace Hopper, del retrato oficial de la Marina de EE. UU. de 1984 (dominio público)."),
     ("Indent", "Aumentar sangría"),
     ("Info", "Informativo"),
     ("Insert a final newline on save", "Añadir un salto de línea final al guardar"),
