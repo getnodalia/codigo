@@ -19,9 +19,10 @@ mod http;
 mod model;
 pub mod secret;
 
-pub use api::{Api, ReviewEvent, Scope};
+pub use api::{Api, LinePlace, NewPull, ReviewEvent, Scope};
 pub use model::{
-    parse_remote, Check, Comment, CommentKind, Issue, Pull, PullDetail, PullFile, RepoInfo, User,
+    parse_remote, Check, Comment, CommentKind, Issue, Pull, PullDetail, PullFile, RepoInfo,
+    ReviewComment, User,
 };
 
 /// What can go wrong talking to GitHub.

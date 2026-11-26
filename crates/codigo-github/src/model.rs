@@ -281,6 +281,45 @@ impl Comment {
     }
 }
 
+/// A comment on one line of a pull request's diff.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReviewComment {
+    pub id: u64,
+    pub author: String,
+    pub body: String,
+    pub created_at: String,
+    /// The file, relative to the repository root.
+    pub path: String,
+    /// The line in the new file (or, on the `LEFT` side, the old one); 0 when the line is gone.
+    pub line: u64,
+    /// `RIGHT` for the new file, `LEFT` for the old one.
+    pub side: String,
+    /// The comment this one answers, when it is a reply.
+    pub reply_to: Option<u64>,
+}
+
+impl ReviewComment {
+    pub fn parse(v: &Value) -> ReviewComment {
+        let line = match n(v, "line") {
+            0 => n(v, "original_line"),
+            l => l,
+        };
+        ReviewComment {
+            id: n(v, "id"),
+            author: login(v, "user"),
+            body: s(v, "body"),
+            created_at: s(v, "created_at"),
+            path: s(v, "path"),
+            line,
+            side: match s(v, "side").as_str() {
+                "LEFT" => "LEFT".into(),
+                _ => "RIGHT".into(),
+            },
+            reply_to: v.get("in_reply_to_id").and_then(Value::as_u64),
+        }
+    }
+}
+
 /// A check on a commit (CI).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Check {
