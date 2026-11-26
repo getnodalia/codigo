@@ -1,0 +1,23 @@
+[package]
+name = "codigo-quality"
+description = "Código's built-in code quality and security analysis: rules, complexity, duplication and secrets, with no server to run."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+codigo-syntax.workspace = true
+codigo-workspace.workspace = true
+ropey.workspace = true
+regex.workspace = true
+tree-sitter.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

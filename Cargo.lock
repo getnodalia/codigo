@@ -616,6 +616,7 @@ name = "codigo-app"
 version = "0.1.0-dev"
 dependencies = [
  "codigo-engine",
+ "codigo-quality",
  "codigo-syntax",
  "codigo-term",
  "codigo-text",
@@ -660,6 +661,18 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+]
+
+[[package]]
+name = "codigo-quality"
+version = "0.1.0-dev"
+dependencies = [
+ "codigo-syntax",
+ "codigo-workspace",
+ "regex",
+ "ropey",
+ "tempfile",
+ "tree-sitter",
 ]
 
 [[package]]

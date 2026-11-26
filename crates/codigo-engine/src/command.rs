@@ -354,6 +354,7 @@ commands! {
     TestProject => ("run.test", "Run the tests", Run, NONE),
     CheckProject => ("run.check", "Check the code", Run, NONE),
     StopRun => ("run.stop", "Stop the running program", Run, shift(Key::F5)),
+    AnalyzeProject => ("quality.analyze", "Analyze the code quality and security", Run, ctrl_shift(Key::Y)),
 
     QuickOpen => ("go.quickOpen", "Go to file…", Go, ctrl(Key::P)),
     GoToLine => ("go.line", "Go to line…", Go, ctrl(Key::G)),

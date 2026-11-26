@@ -20,12 +20,11 @@ restore, language server diagnostics, hover, completion and go to definition, a 
    tabs, and a run console for run, build, test and check with clickable errors, exist. Still to
    do: tasks defined per project, problem matchers for more output formats, split terminals,
    and keeping terminals across restarts.
-3. **Code quality and security, built in.** Direct analysis with no server to run, in the style of
-   SonarQube: the language servers' diagnostics and each language's own linters (clippy and
-   others), plus Código's own rules for complexity, duplication, long functions, dead code and
-   common vulnerabilities (hard-coded secrets, unsafe patterns, dependency advisories). A Quality
-   panel lists findings by severity, a gate summarises the project, and fixes apply from the
-   editor.
+3. **Code quality and security, built in.** The direct analysis exists: Código's own rules for
+   secrets, unsafe patterns, Rust panics, long and complex functions and duplication, in a Quality
+   panel with a gate. Still to do: the language servers' diagnostics and each language's own
+   linters (clippy and others) in the same panel, dependency advisories, more languages' rules,
+   findings in the editor margin, per-project rule settings, and fixes that apply from the editor.
 4. **Tools for building Nodalia apps.** Project templates for NDL apps, a component and theme
    preview, helpers for tokens, icons and Spanish catalogs, and checks for the Nodalia
    engineering rules (no unwrap, strings through i18n, colours from tokens) so the editor helps

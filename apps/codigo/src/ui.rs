@@ -187,6 +187,13 @@ fn apply(ctx: &egui::Context, app: &mut App, act: Act) {
             if panel == Panel::Search {
                 app.psearch.focus = true;
             }
+            if panel == Panel::Quality
+                && app.project.is_some()
+                && app.quality.report.is_none()
+                && !app.quality.running
+            {
+                app.run_quality();
+            }
         }
         Act::ProjectSearch => app.run_project_search(),
         Act::FindNext => app.find_step(true),
@@ -380,6 +387,7 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         for (panel, label) in [
             (Panel::Explorer, tr("Files")),
             (Panel::Search, tr("Search")),
+            (Panel::Quality, tr("Quality")),
         ] {
             if cr::tab(ui, look, label, app.panel == panel).clicked() {
                 acts.push(Act::Panel(panel));
@@ -397,6 +405,26 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     match app.panel {
         Panel::Explorer => explorer(ui, app, look, acts),
         Panel::Search => search_panel(ui, app, look, acts),
+        Panel::Quality => {
+            if app.project.is_none() {
+                no_project(ui, app, look, acts);
+            } else {
+                let outcome = crate::quality_ui::panel(ui, app, look);
+                if outcome.analyze {
+                    acts.push(Act::Run(Cmd::AnalyzeProject));
+                }
+                if let Some((rel, line, start, end)) = outcome.open {
+                    if let Some(root) = app.project.as_ref().map(|p| p.root.clone()) {
+                        acts.push(Act::OpenResult {
+                            path: root.join(rel),
+                            line,
+                            start,
+                            end,
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 

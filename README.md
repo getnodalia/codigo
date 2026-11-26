@@ -27,6 +27,14 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   (`cargo run`, `npm start`, `go run .`, `python main.py` and more, chosen from what the folder
   contains) in a tab of its own, and Build, Test and Check are in the Run menu. A
   `path:line:column` in the output is a link: click it to open that place.
+- **Code quality and security, built in.** The Quality tab (`Ctrl+Shift+Y`) analyses the folder
+  with no server to run and nothing leaving your computer: hard-coded secrets (private keys,
+  cloud tokens, passwords), unsafe patterns (`eval`, shell commands from strings, SQL built from
+  text, disabled TLS checks, weak hashes, unsafe C functions, `innerHTML`), Rust shortcuts that
+  can panic, functions that are too long, too branching or take too many parameters, and blocks
+  of code that were copied. Findings are listed worst first under a quality gate, and a click
+  opens the exact place. Put `codigo-ignore` on a line to silence it. Fixes from the editor and
+  dependency advisories are not there yet.
 - **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
   the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
@@ -55,7 +63,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 ## Layout
 
 `crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
-(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-workspace` (folders, fuzzy matching, project search,
+(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-quality` (quality and security analysis), `crates/codigo-workspace` (folders, fuzzy matching, project search,
 git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
 app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
 
