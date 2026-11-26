@@ -44,6 +44,10 @@ pub struct View {
     pub reveal: bool,
     /// Lines the working copy changed against git, for the gutter.
     pub marks: Vec<LineChange>,
+    /// Lines (zero-based) with a breakpoint, sorted, for the gutter.
+    pub breakpoints: Vec<usize>,
+    /// The line the debugger is stopped on, if it is stopped in this file.
+    pub exec_line: Option<usize>,
     /// Time of the last edit or caret move, to keep the caret solid while typing.
     last_input: f64,
     /// Rows a page is, from the last frame.
@@ -90,6 +94,8 @@ pub struct Output {
     pub edited: bool,
     /// Text for the system clipboard.
     pub copied: Option<String>,
+    /// The gutter was clicked on this line (zero-based): toggle a breakpoint.
+    pub gutter_click: Option<usize>,
 }
 
 pub fn indent_rules(language_id: &str) -> IndentRules {
@@ -424,6 +430,16 @@ pub fn show(
                     {
                         painter.rect_filled(row_rect, 0.0, active_fill);
                     }
+                    if ri == 0 && view.exec_line == Some(line) {
+                        painter.rect_filled(
+                            Rect::from_min_max(
+                                pos2(clip.left() + m.gutter, y),
+                                pos2(clip.right(), y + m.row_h),
+                            ),
+                            0.0,
+                            color(p.status_warning_bg).gamma_multiply(0.7),
+                        );
+                    }
                     // Find matches.
                     for (ma, mb) in &find_hits {
                         let (sa, sb) = ((*ma).max(a), (*mb).min(b));
@@ -568,6 +584,24 @@ pub fn show(
                             color(p.text_tertiary)
                         },
                     );
+                }
+            }
+            for (y, line, _) in &gutter_items {
+                let centre = pos2(gx + 9.0, y + m.row_h / 2.0);
+                if view.breakpoints.binary_search(line).is_ok() {
+                    painter.circle_filled(centre, 4.5, color(p.status_danger_fg));
+                }
+                if view.exec_line == Some(*line) {
+                    let tri = vec![
+                        pos2(centre.x - 4.0, centre.y - 5.0),
+                        pos2(centre.x + 5.0, centre.y),
+                        pos2(centre.x - 4.0, centre.y + 5.0),
+                    ];
+                    painter.add(egui::Shape::convex_polygon(
+                        tri,
+                        color(p.status_warning_fg),
+                        Stroke::NONE,
+                    ));
                 }
             }
             for change in &view.marks {
@@ -846,6 +880,11 @@ fn pointer(
     };
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+    }
+    if pressed && response.hovered() && pos.x < text_x {
+        let idx = at(doc, view);
+        out.gutter_click = Some(doc.buffer().line_of(idx));
+        return;
     }
     if pressed && response.hovered() {
         response.request_focus();

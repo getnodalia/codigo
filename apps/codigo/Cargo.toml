@@ -20,6 +20,7 @@ codigo-syntax.workspace = true
 codigo-workspace.workspace = true
 codigo-engine.workspace = true
 codigo-term.workspace = true
+codigo-dap.workspace = true
 codigo-quality.workspace = true
 codigo-nodalia.workspace = true
 eframe.workspace = true

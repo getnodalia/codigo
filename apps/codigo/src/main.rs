@@ -17,9 +17,11 @@
 
 mod app;
 mod chrome;
+mod debug_ui;
 mod editor;
 mod explorer;
 mod file_icons;
+mod glyphs;
 mod i18n;
 mod icon;
 mod layout;
