@@ -1121,6 +1121,9 @@ impl App {
                 }
             }
             GoToDefinition => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Definition, false),
+            FindReferences => crate::lsp_ui::ask(self, codigo_engine::QueryKind::References, false),
+            RenameSymbol => crate::lsp_ui::open_rename(self),
+            FormatDocument => crate::lsp_ui::format_document(self),
             ShowHover => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Hover, false),
             TriggerCompletion => {
                 crate::lsp_ui::ask(self, codigo_engine::QueryKind::Completion, false)

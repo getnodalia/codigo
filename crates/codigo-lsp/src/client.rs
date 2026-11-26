@@ -235,6 +235,33 @@ impl Client {
         )
     }
 
+    /// `textDocument/references`, including the declaration.
+    pub fn references(&self, uri: &str, position: Position) -> Pending {
+        self.request(
+            "textDocument/references",
+            json!({"textDocument": {"uri": uri}, "position": position,
+                   "context": {"includeDeclaration": true}}),
+        )
+    }
+
+    /// `textDocument/rename`: the edits that rename the symbol at `position`.
+    pub fn rename(&self, uri: &str, position: Position, new_name: &str) -> Pending {
+        self.request(
+            "textDocument/rename",
+            json!({"textDocument": {"uri": uri}, "position": position, "newName": new_name}),
+        )
+    }
+
+    /// `textDocument/formatting`: the edits that format the whole document.
+    pub fn formatting(&self, uri: &str, tab_size: u32, insert_spaces: bool) -> Pending {
+        self.request(
+            "textDocument/formatting",
+            json!({"textDocument": {"uri": uri},
+                   "options": {"tabSize": tab_size, "insertSpaces": insert_spaces,
+                               "trimTrailingWhitespace": true, "insertFinalNewline": true}}),
+        )
+    }
+
     /// Ask the server to stop, then tell it to exit. Best effort within `timeout`.
     pub fn shutdown(&self, timeout: Duration) {
         let _ = self.request("shutdown", Value::Null).wait(timeout);
@@ -245,7 +272,8 @@ impl Client {
 fn client_capabilities() -> Value {
     json!({
         "general": {"positionEncodings": ["utf-16"]},
-        "workspace": {"workspaceFolders": true, "configuration": true},
+        "workspace": {"workspaceFolders": true, "configuration": true,
+                      "workspaceEdit": {"documentChanges": true}},
         "window": {"workDoneProgress": true},
         "textDocument": {
             "synchronization": {"didSave": true, "dynamicRegistration": false},

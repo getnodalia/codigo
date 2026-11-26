@@ -11,9 +11,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use codigo_lsp::{
-    char_to_utf16, parse_completion, parse_hover, parse_locations, path_to_uri, server_for,
-    spawn_with, uri_to_path, utf16_to_char, CompletionItem, Diagnostic, Event, Pending, Position,
-    ServerSpec, Severity, SpawnError, Spawned, Waker,
+    char_to_utf16, parse_completion, parse_hover, parse_locations, parse_text_edits,
+    parse_workspace_edit, path_to_uri, server_for, spawn_with, uri_to_path, utf16_to_char,
+    CompletionItem, Diagnostic, Event, Pending, Position, ServerSpec, Severity, SpawnError,
+    Spawned, TextEdit, Waker,
 };
 
 use crate::document::Document;
@@ -82,6 +83,9 @@ pub enum QueryKind {
     Definition,
     Hover,
     Completion,
+    References,
+    Rename,
+    Format,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,9 +105,27 @@ pub struct Place {
     pub character: u32,
 }
 
+/// One replacement in a file, positioned as the protocol counts: a line and a UTF-16 column at
+/// each end. Turn the columns into chars with [`char_in_line`] against the file's own text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaceEdit {
+    pub start: (usize, u32),
+    pub end: (usize, u32),
+    pub new_text: String,
+}
+
+/// What a rename or a format asks to change in one file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileChange {
+    pub path: PathBuf,
+    pub edits: Vec<PlaceEdit>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Answer {
     Places(Vec<Place>),
+    References(Vec<Place>),
+    Edits(Vec<FileChange>),
     Hover(Option<String>),
     Completion(Vec<CompletionItem>),
 }
@@ -111,6 +133,8 @@ pub enum Answer {
 /// A request in flight. Poll it from the frame loop.
 pub struct Query {
     pub kind: QueryKind,
+    /// The file a formatting answer is about; the protocol's reply does not name it.
+    path: Option<PathBuf>,
     pending: Pending,
 }
 
@@ -120,15 +144,28 @@ impl Query {
         let reply = self.pending.poll()?;
         Some(reply.map_err(|e| e.message).map(|value| {
             match self.kind {
-                QueryKind::Definition => Answer::Places(
-                    parse_locations(&value)
+                QueryKind::Definition => Answer::Places(places(&value)),
+                QueryKind::References => Answer::References(places(&value)),
+                QueryKind::Rename => Answer::Edits(
+                    parse_workspace_edit(&value)
                         .into_iter()
-                        .filter_map(|l| {
-                            Some(Place {
-                                path: uri_to_path(&l.uri)?,
-                                line: l.range.start.line as usize,
-                                character: l.range.start.character,
+                        .filter_map(|f| {
+                            Some(FileChange {
+                                path: uri_to_path(&f.uri)?,
+                                edits: f.edits.into_iter().map(place_edit).collect(),
                             })
+                        })
+                        .collect(),
+                ),
+                QueryKind::Format => Answer::Edits(
+                    self.path
+                        .iter()
+                        .map(|path| FileChange {
+                            path: path.clone(),
+                            edits: parse_text_edits(&value)
+                                .into_iter()
+                                .map(place_edit)
+                                .collect(),
                         })
                         .collect(),
                 ),
@@ -137,6 +174,46 @@ impl Query {
             }
         }))
     }
+}
+
+fn place_edit(e: TextEdit) -> PlaceEdit {
+    PlaceEdit {
+        start: (e.range.start.line as usize, e.range.start.character),
+        end: (e.range.end.line as usize, e.range.end.character),
+        new_text: e.new_text,
+    }
+}
+
+fn places(value: &serde_json::Value) -> Vec<Place> {
+    parse_locations(value)
+        .into_iter()
+        .filter_map(|l| {
+            Some(Place {
+                path: uri_to_path(&l.uri)?,
+                line: l.range.start.line as usize,
+                character: l.range.start.character,
+            })
+        })
+        .collect()
+}
+
+/// A server's edits as char ranges in `doc`'s text. Positions past the end clamp to it.
+pub fn edits_for(doc: &Document, edits: &[PlaceEdit]) -> Vec<codigo_text::Edit> {
+    let buffer = doc.buffer();
+    let offset = |(line, utf16): (usize, u32)| {
+        if line >= buffer.line_count() {
+            return buffer.len_chars();
+        }
+        buffer.line_start(line) + char_in_line(doc, line, utf16)
+    };
+    edits
+        .iter()
+        .map(|e| {
+            let start = offset(e.start);
+            let end = offset(e.end).max(start);
+            codigo_text::Edit::new(start..end, e.new_text.clone())
+        })
+        .collect()
 }
 
 /// The char column that sits `utf16` units into `text`'s line `line`.
@@ -520,12 +597,39 @@ impl Hub {
     }
 
     /// Ask the server for `kind` of answer at char offset `at` in `doc`. Edits not yet sent are
-    /// sent first, so the server answers about the text the person sees.
+    /// sent first, so the server answers about the text the person sees. A rename takes its new
+    /// name from `name`; a format has no position and takes the indent from `indent`.
     pub fn query(
         &mut self,
         doc: &Document,
         at: usize,
         kind: QueryKind,
+    ) -> Result<Query, QueryError> {
+        self.ask(doc, at, kind, "", (4, true))
+    }
+
+    /// Rename the symbol at `at` to `name`.
+    pub fn rename(&mut self, doc: &Document, at: usize, name: &str) -> Result<Query, QueryError> {
+        self.ask(doc, at, QueryKind::Rename, name, (4, true))
+    }
+
+    /// Format the whole of `doc`.
+    pub fn format(
+        &mut self,
+        doc: &Document,
+        tab_size: u32,
+        insert_spaces: bool,
+    ) -> Result<Query, QueryError> {
+        self.ask(doc, 0, QueryKind::Format, "", (tab_size, insert_spaces))
+    }
+
+    fn ask(
+        &mut self,
+        doc: &Document,
+        at: usize,
+        kind: QueryKind,
+        name: &str,
+        indent: (u32, bool),
     ) -> Result<Query, QueryError> {
         let path = doc.path().ok_or(QueryError::NoServer)?;
         let spec = server_for(doc.language().id).ok_or(QueryError::NoServer)?;
@@ -549,17 +653,23 @@ impl Hub {
             line: u32::try_from(line).unwrap_or(u32::MAX),
             character: char_to_utf16(&buffer.line_text(line), col),
         };
-        let method = match kind {
-            QueryKind::Definition => "textDocument/definition",
-            QueryKind::Hover => "textDocument/hover",
-            QueryKind::Completion => "textDocument/completion",
+        let client = &running.server.client;
+        let pending = match kind {
+            QueryKind::Definition => {
+                client.at_position("textDocument/definition", &synced.uri, position)
+            }
+            QueryKind::Hover => client.at_position("textDocument/hover", &synced.uri, position),
+            QueryKind::Completion => {
+                client.at_position("textDocument/completion", &synced.uri, position)
+            }
+            QueryKind::References => client.references(&synced.uri, position),
+            QueryKind::Rename => client.rename(&synced.uri, position, name),
+            QueryKind::Format => client.formatting(&synced.uri, indent.0, indent.1),
         };
         Ok(Query {
             kind,
-            pending: running
-                .server
-                .client
-                .at_position(method, &synced.uri, position),
+            path: Some(path.to_path_buf()),
+            pending,
         })
     }
 
@@ -612,6 +722,30 @@ mod tests {
         let path = dir.join(name);
         std::fs::write(&path, text).expect("write");
         Document::open(DocId(1), &path).expect("open")
+    }
+
+    #[test]
+    fn a_servers_edits_become_char_ranges() {
+        let d = tempfile::tempdir().expect("tempdir");
+        let doc = doc_in(d.path(), "a.rs", "let é = 1;\nlet b = 2;\n");
+        let edits = vec![
+            PlaceEdit {
+                start: (0, 4),
+                end: (0, 5),
+                new_text: "e".into(),
+            },
+            PlaceEdit {
+                start: (1, 4),
+                end: (99, 0),
+                new_text: "c".into(),
+            },
+        ];
+        let got = edits_for(&doc, &edits);
+        assert_eq!(got[0].range, 4..5);
+        assert_eq!(got[1].range, 15..doc.buffer().len_chars());
+        let mut text = doc.buffer().text();
+        text = text.replacen('é', "e", 1);
+        assert!(text.starts_with("let e"));
     }
 
     #[test]

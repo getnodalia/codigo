@@ -7,6 +7,10 @@ use serde_json::Value;
 use crate::diagnostics::parse_range;
 use crate::position::Range;
 
+const MAX_EDITS: usize = 20_000;
+const MAX_FILES: usize = 200;
+const MAX_EDIT_TEXT: usize = 2_000_000;
+
 const MAX_LOCATIONS: usize = 200;
 const MAX_HOVER_CHARS: usize = 8_000;
 const MAX_ITEMS: usize = 2_000;
@@ -74,6 +78,75 @@ pub fn parse_hover(value: &Value) -> Option<String> {
         return None;
     }
     Some(joined.chars().take(MAX_HOVER_CHARS).collect())
+}
+
+/// One replacement a server asks for: the range, and the text that takes its place.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextEdit {
+    pub range: Range,
+    pub new_text: String,
+}
+
+/// The edits a server wants made to one file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileEdits {
+    pub uri: String,
+    pub edits: Vec<TextEdit>,
+}
+
+fn parse_edit(v: &Value) -> Option<TextEdit> {
+    let text = v.get("newText")?.as_str()?;
+    if text.len() > MAX_EDIT_TEXT {
+        return None;
+    }
+    Some(TextEdit {
+        range: parse_range(v.get("range")?)?,
+        new_text: text.to_owned(),
+    })
+}
+
+/// `TextEdit[]`, the answer to a formatting request. Anything else is no edits.
+pub fn parse_text_edits(value: &Value) -> Vec<TextEdit> {
+    value
+        .as_array()
+        .map(|a| a.iter().filter_map(parse_edit).take(MAX_EDITS).collect())
+        .unwrap_or_default()
+}
+
+/// A `WorkspaceEdit`, in either of its shapes (`changes` or `documentChanges`). Creating,
+/// renaming and deleting files is not supported: those entries are skipped.
+pub fn parse_workspace_edit(value: &Value) -> Vec<FileEdits> {
+    let mut out: Vec<FileEdits> = Vec::new();
+    let mut add = |uri: &str, edits: Vec<TextEdit>| {
+        if edits.is_empty() || out.len() >= MAX_FILES {
+            return;
+        }
+        match out.iter_mut().find(|f| f.uri == uri) {
+            Some(f) => f.edits.extend(edits),
+            None => out.push(FileEdits {
+                uri: uri.to_owned(),
+                edits,
+            }),
+        }
+    };
+    if let Some(changes) = value.get("changes").and_then(Value::as_object) {
+        for (uri, edits) in changes {
+            add(uri, parse_text_edits(edits));
+        }
+    }
+    if let Some(docs) = value.get("documentChanges").and_then(Value::as_array) {
+        for d in docs {
+            let uri = d
+                .get("textDocument")
+                .and_then(|t| t.get("uri"))
+                .and_then(Value::as_str);
+            let edits = d.get("edits").map(parse_text_edits);
+            if let (Some(uri), Some(edits)) = (uri, edits) {
+                add(uri, edits);
+            }
+        }
+    }
+    out
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,5 +345,28 @@ mod tests {
         assert_eq!(strip_snippet("${1:unclosed"), "unclosed");
         let item = json!({"label": "f", "insertText": "f(${1:x})", "insertTextFormat": 2});
         assert_eq!(parse_completion(&json!([item]))[0].insert, "f(x)");
+    }
+
+    #[test]
+    fn edits_are_read_in_both_workspace_shapes() {
+        let edit = json!({"range": range(1), "newText": "x"});
+        assert_eq!(
+            parse_text_edits(&json!([edit.clone(), {"newText": 1}])).len(),
+            1
+        );
+        assert!(parse_text_edits(&Value::Null).is_empty());
+        let a = json!({"changes": {"file:///a.rs": [edit.clone()], "file:///b.rs": []}});
+        let got = parse_workspace_edit(&a);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].uri, "file:///a.rs");
+        let b = json!({"documentChanges": [
+            {"textDocument": {"uri": "file:///c.rs", "version": 1}, "edits": [edit.clone()]},
+            {"kind": "rename", "oldUri": "file:///c.rs", "newUri": "file:///d.rs"},
+            {"textDocument": {"uri": "file:///c.rs"}, "edits": [edit]}
+        ]});
+        let got = parse_workspace_edit(&b);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].edits.len(), 2);
+        assert!(parse_workspace_edit(&json!(3)).is_empty());
     }
 }

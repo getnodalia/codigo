@@ -79,6 +79,8 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(JoinLines),
                 None,
                 some(TriggerCompletion),
+                some(RenameSymbol),
+                some(FormatDocument),
             ]),
         ),
         (
@@ -119,6 +121,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(QuickOpen),
                 some(GoToLine),
                 some(GoToDefinition),
+                some(FindReferences),
                 some(ShowHover),
                 None,
                 some(NextTab),
