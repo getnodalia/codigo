@@ -28,6 +28,7 @@ mod linux_menu;
 mod lsp_ui;
 mod menu;
 mod overlays;
+mod quality_ui;
 mod spanish;
 mod syntax_theme;
 mod terminal_ui;

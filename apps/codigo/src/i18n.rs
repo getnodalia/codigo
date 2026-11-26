@@ -147,6 +147,19 @@ mod tests {
     }
 
     #[test]
+    fn every_quality_rule_has_spanish() {
+        for rule in codigo_quality::RULES {
+            for text in [rule.title, rule.advice] {
+                assert!(
+                    SPANISH.binary_search_by_key(&text, |(en, _)| en).is_ok(),
+                    "{}: {text}",
+                    rule.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn every_command_and_category_has_spanish() {
         let has = |english: &str| SPANISH.binary_search_by(|(en, _)| en.cmp(&english)).is_ok();
         let mut missing: Vec<String> = codigo_engine::Cmd::ALL

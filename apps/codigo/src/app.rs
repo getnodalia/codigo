@@ -30,6 +30,7 @@ pub enum Msg {
     Files(PathBuf, Vec<String>),
     Search(u64, Result<SearchResult, String>),
     Git(PathBuf, Option<GitInfo>),
+    Quality(u64, codigo_quality::Report),
 }
 
 pub struct Tab {
@@ -46,6 +47,7 @@ pub struct Toast {
 pub enum Panel {
     Explorer,
     Search,
+    Quality,
 }
 
 /// The find bar's state.
@@ -104,6 +106,25 @@ impl Default for ProjectSearch {
     }
 }
 
+/// The quality panel's state: the last analysis of the folder.
+pub struct QualityPanel {
+    pub running: bool,
+    pub serial: u64,
+    pub report: Option<codigo_quality::Report>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Default for QualityPanel {
+    fn default() -> Self {
+        QualityPanel {
+            running: false,
+            serial: 0,
+            report: None,
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+
 pub struct Project {
     pub root: PathBuf,
     pub explorer: Explorer,
@@ -130,6 +151,7 @@ pub struct App {
     pub overlay: Overlay,
     pub find: Find,
     pub psearch: ProjectSearch,
+    pub quality: QualityPanel,
     pub files: Option<(PathBuf, Arc<Vec<String>>)>,
     pub closed: Vec<PathBuf>,
     pub toasts: Vec<Toast>,
@@ -183,6 +205,7 @@ impl App {
             overlay: Overlay::None,
             find: Find::default(),
             psearch: ProjectSearch::default(),
+            quality: QualityPanel::default(),
             files: None,
             closed: Vec::new(),
             toasts: Vec::new(),
@@ -558,6 +581,10 @@ impl App {
         }
         self.files = None;
         self.psearch = ProjectSearch::default();
+        self.quality
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.quality = QualityPanel::default();
         self.project = Some(Project {
             explorer: Explorer::new(root.clone()),
             root: root.clone(),
@@ -571,6 +598,10 @@ impl App {
     }
 
     pub fn close_project(&mut self) {
+        self.quality
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.quality = QualityPanel::default();
         self.project = None;
         self.files = None;
         self.session_dirty = true;
@@ -630,6 +661,27 @@ impl App {
         });
     }
 
+    /// Analyse the folder for quality and security problems, off the UI thread.
+    pub fn run_quality(&mut self) {
+        let Some(root) = self.project.as_ref().map(|p| p.root.clone()) else {
+            return;
+        };
+        self.quality
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.quality.serial += 1;
+        let serial = self.quality.serial;
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.quality.cancel = cancel.clone();
+        self.quality.running = true;
+        let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+        std::thread::spawn(move || {
+            let report = codigo_quality::analyze_project(&root, &cancel);
+            let _ = tx.send(Msg::Quality(serial, report));
+            ctx.request_repaint();
+        });
+    }
+
     /// Keep the language servers in step with the open files and read what they reported.
     fn sync_language_servers(&mut self) {
         self.lsp.set_enabled(self.settings.language_servers);
@@ -663,6 +715,12 @@ impl App {
                 Msg::Git(root, info) => {
                     if let Some(p) = self.project.as_mut().filter(|p| p.root == root) {
                         p.git = info;
+                    }
+                }
+                Msg::Quality(serial, report) => {
+                    if serial == self.quality.serial {
+                        self.quality.running = false;
+                        self.quality.report = Some(report);
                     }
                 }
                 Msg::Search(serial, result) => {
@@ -769,6 +827,15 @@ impl App {
             Paste => ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste),
             Find => self.open_find(false),
             Replace => self.open_find(true),
+            AnalyzeProject => {
+                if self.project.is_some() {
+                    self.panel = Panel::Quality;
+                    self.sidebar_visible = true;
+                    self.run_quality();
+                } else {
+                    self.toast(tr("Open a folder first."));
+                }
+            }
             FindNext => self.find_step(true),
             FindPrevious => self.find_step(false),
             FindInProject => {

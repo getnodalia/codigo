@@ -132,6 +132,8 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(BuildProject),
                 some(TestProject),
                 some(CheckProject),
+                None,
+                some(AnalyzeProject),
             ]),
         ),
     ]
