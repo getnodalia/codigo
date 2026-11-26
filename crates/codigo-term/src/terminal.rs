@@ -31,20 +31,75 @@ pub struct Spec {
     pub env: Vec<(String, String)>,
 }
 
+/// Whether `path` is a program this person could run.
+#[cfg(unix)]
+fn runnable(path: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+/// The login shell the system lists for `user`, from a `passwd` file's text.
+#[cfg(unix)]
+fn passwd_shell(passwd: &str, user: &str) -> Option<String> {
+    passwd.lines().find_map(|line| {
+        let mut f = line.split(':');
+        let name = f.next()?;
+        let shell = f.nth(5)?;
+        (name == user && !shell.is_empty()).then(|| shell.to_owned())
+    })
+}
+
+/// The first shell that exists: the one in `$SHELL`, the one the system lists for the person,
+/// then the common ones. A desktop launcher does not always pass `$SHELL` on, and a stale one
+/// (a shell that was uninstalled) must not leave the terminal empty.
+#[cfg(unix)]
+fn choose_shell(
+    env_shell: Option<String>,
+    listed: Option<String>,
+    usable: impl Fn(&str) -> bool,
+) -> String {
+    env_shell
+        .into_iter()
+        .chain(listed)
+        .chain(
+            [
+                "/bin/bash",
+                "/usr/bin/bash",
+                "/bin/zsh",
+                "/bin/sh",
+                "/usr/bin/sh",
+            ]
+            .map(String::from),
+        )
+        .find(|s| !s.is_empty() && usable(s))
+        .unwrap_or_else(|| "/bin/sh".to_owned())
+}
+
 /// The user's shell, as a [`Spec`] to run in `cwd`.
 pub fn shell_command(cwd: PathBuf) -> Spec {
     #[cfg(windows)]
     let program = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned());
     #[cfg(not(windows))]
-    let program = std::env::var("SHELL")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "/bin/sh".to_owned());
+    let program = {
+        let user = std::env::var("USER")
+            .or_else(|_| std::env::var("LOGNAME"))
+            .ok();
+        let listed = user.and_then(|u| {
+            let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+            passwd_shell(&passwd, &u)
+        });
+        choose_shell(std::env::var("SHELL").ok(), listed, runnable)
+    };
+    let mut env = vec![("SHELL".to_owned(), program.clone())];
+    // A session started from a desktop launcher may have no locale; the screen expects UTF-8.
+    if std::env::var_os("LANG").is_none() && std::env::var_os("LC_ALL").is_none() {
+        env.push(("LANG".to_owned(), "C.UTF-8".to_owned()));
+    }
     Spec {
         program,
         args: Vec::new(),
         cwd,
-        env: Vec::new(),
+        env,
     }
 }
 
@@ -99,7 +154,16 @@ impl Terminal {
             .map_err(|e| TermError::Pty(e.to_string()))?;
         let mut cmd = CommandBuilder::new(&spec.program);
         cmd.args(&spec.args);
-        cmd.cwd(&spec.cwd);
+        // A project folder that went away must not stop the terminal from opening.
+        let cwd = if spec.cwd.is_dir() {
+            spec.cwd.clone()
+        } else {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|h| h.is_dir())
+                .unwrap_or_else(std::env::temp_dir)
+        };
+        cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         for (k, v) in &spec.env {
@@ -321,6 +385,56 @@ mod tests {
             env: Vec::new(),
         };
         assert!(Terminal::spawn(&spec, 5, 20, None).is_err());
+    }
+
+    #[test]
+    fn a_stale_shell_falls_through_to_the_listed_one_and_then_the_common_ones() {
+        let usable = |s: &str| s == "/usr/bin/fish" || s == "/bin/sh";
+        // $SHELL is gone: the system's listing wins over the common shells.
+        assert_eq!(
+            choose_shell(
+                Some("/gone/zsh".into()),
+                Some("/usr/bin/fish".into()),
+                usable
+            ),
+            "/usr/bin/fish"
+        );
+        // No $SHELL at all (a desktop launcher): the listing is used.
+        assert_eq!(
+            choose_shell(None, Some("/usr/bin/fish".into()), usable),
+            "/usr/bin/fish"
+        );
+        // Neither: a common shell.
+        assert_eq!(choose_shell(None, None, usable), "/bin/sh");
+        // Nothing is usable: still a program name, so the error says which.
+        assert_eq!(choose_shell(None, None, |_| false), "/bin/sh");
+        assert_eq!(choose_shell(Some(String::new()), None, usable), "/bin/sh");
+    }
+
+    #[test]
+    fn the_system_listing_gives_the_login_shell() {
+        let passwd = "root:x:0:0:root:/root:/bin/bash\ndaniel:x:1000:1000:D:/home/daniel:/usr/bin/zsh\nnobody:x:65534:65534::/:\n";
+        assert_eq!(
+            passwd_shell(passwd, "daniel").as_deref(),
+            Some("/usr/bin/zsh")
+        );
+        assert_eq!(passwd_shell(passwd, "root").as_deref(), Some("/bin/bash"));
+        assert_eq!(passwd_shell(passwd, "nobody"), None);
+        assert_eq!(passwd_shell(passwd, "nobody2"), None);
+        assert_eq!(passwd_shell("junk without colons", "junk"), None);
+    }
+
+    #[test]
+    fn the_shell_opens_even_when_the_folder_is_gone() {
+        let spec = Spec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "printf here".into()],
+            cwd: PathBuf::from("/no/such/folder"),
+            env: Vec::new(),
+        };
+        let mut t = Terminal::spawn(&spec, 5, 20, None).expect("spawn");
+        wait_for(&mut t, |t| t.output_done());
+        assert!(t.screen(|s| s.contents()).contains("here"));
     }
 
     #[test]

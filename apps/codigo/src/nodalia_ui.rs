@@ -18,7 +18,7 @@ pub struct NewApp {
     name: String,
     accent: Accent,
     /// The folder the app's own folder is created in.
-    parent: PathBuf,
+    pub parent: PathBuf,
     error: Option<String>,
     focus: bool,
 }
@@ -137,12 +137,9 @@ pub fn new_app(ctx: &egui::Context, app: &mut App, look: &Look, mut state: NewAp
         return (Overlay::None, true);
     }
     if choose {
-        if let Some(dir) = rfd::FileDialog::new()
-            .set_directory(&state.parent)
-            .pick_folder()
-        {
-            state.parent = dir;
-        }
+        let mut req = crate::dialogs::Request::new(crate::dialogs::Purpose::NewAppParent);
+        req.dir = Some(state.parent.clone());
+        crate::dialogs::request(app, req);
     }
     if create {
         let spec = AppSpec {

@@ -458,7 +458,21 @@ pub fn logo(ui: &mut Ui, size: f32) {
 
 // --- Sidebar -----------------------------------------------------------------------------------
 
+/// Room between the sidebar island's edge and what it holds, as in the other Engineering apps.
+const SIDEBAR_PAD: Margin = Margin {
+    left: 10,
+    right: 10,
+    top: 10,
+    bottom: 8,
+};
+
 fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
+    egui::Frame::NONE
+        .inner_margin(SIDEBAR_PAD)
+        .show(ui, |ui| sidebar_content(ui, app, look, acts));
+}
+
+fn sidebar_content(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
