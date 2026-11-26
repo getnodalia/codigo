@@ -1,0 +1,61 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/codigo-text",
+    "crates/codigo-syntax",
+]
+
+[workspace.package]
+version = "0.1.0-dev"
+edition = "2021"
+rust-version = "1.91"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/getnodalia/codigo"
+authors = ["Nodalia"]
+
+[workspace.dependencies]
+codigo-text = { path = "crates/codigo-text" }
+codigo-syntax = { path = "crates/codigo-syntax" }
+codigo-workspace = { path = "crates/codigo-workspace" }
+codigo-engine = { path = "crates/codigo-engine" }
+
+ropey = { version = "1.6", default-features = false, features = ["simd"] }
+unicode-segmentation = "1"
+unicode-width = "0.2"
+regex = "1"
+ignore = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+directories = "6"
+tempfile = "3"
+
+tree-sitter = "0.27"
+streaming-iterator = "0.1"
+
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "system_fonts", "wayland", "x11"] }
+egui = "0.37"
+nodalia-theme = { git = "https://github.com/getnodalia/nodalia-design", rev = "d96f7d17ed513929c544e97f041d022e0628853a", features = ["egui", "creator"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
