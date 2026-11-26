@@ -31,7 +31,7 @@ pub enum Side {
     Both,
 }
 
-fn marker<'a>(line: &'a str, ch: char) -> Option<&'a str> {
+fn marker(line: &str, ch: char) -> Option<&str> {
     let line = line.trim_end_matches(['\n', '\r']);
     let n = line.chars().take_while(|c| *c == ch).count();
     if n != 7 {
