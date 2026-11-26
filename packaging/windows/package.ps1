@@ -60,12 +60,10 @@ function Get-PeHeader([string] $Path) {
   return @{ Machine = [BitConverter]::ToUInt16($bytes, $pe + 4); Subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C) }
 }
 $Machine = switch ($Arch) { 'x64' { 0x8664 } 'arm64' { 0xAA64 } }
-foreach ($check in @(@('codigo.exe', 2))) {
-  $h = Get-PeHeader (Join-Path $Bin $check[0])
-  if ($h.Machine -ne $Machine) { throw "$($check[0]) is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
-  if ($h.Subsystem -ne $check[1]) { throw "$($check[0]) has PE subsystem $($h.Subsystem), expected $($check[1])" }
-  Write-Output "ok $($check[0]): $Arch, PE subsystem $($h.Subsystem)"
-}
+$h = Get-PeHeader (Join-Path $Bin 'codigo.exe')
+if ($h.Machine -ne $Machine) { throw "codigo.exe is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
+if ($h.Subsystem -ne 2) { throw "codigo.exe has PE subsystem $($h.Subsystem), expected 2 (a window app)" }
+Write-Output "ok codigo.exe: $Arch, PE subsystem $($h.Subsystem)"
 
 $Name = "codigo-$Version-windows-$Arch-portable"
 $Stage = Join-Path $TargetDir "windows-package\$Name"
