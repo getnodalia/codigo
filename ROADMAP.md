@@ -12,8 +12,9 @@ restore, Spanish and English, Nodalia Design themes, Linux global menu, update c
 ## Next, in this order
 
 1. **Language servers (LSP).** Diagnostics, hover, completion, go to definition, references, rename
-   and formatting, with servers started per language from the user's PATH or settings. A new
-   `codigo-lsp` crate, with its own off-thread transport.
+   and formatting, with servers started per language from the user's PATH or settings. The
+   `codigo-lsp` crate (protocol client, off-thread transport, server registry) exists; it is not
+   wired into the editor yet, so nothing in the interface uses it.
 2. **Integrated terminal.** A pty-backed terminal panel (`codigo-term`) with tabs and the project
    folder as its working directory.
 3. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`

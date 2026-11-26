@@ -1,11 +1,12 @@
 # Architecture
 
 ```text
-apps/codigo            egui app: window, editor widget, explorer, overlays, menus, translations
-crates/codigo-engine   documents (buffer + syntax + file), commands, settings, session
-crates/codigo-syntax   languages and tree-sitter highlighting
+apps/codigo              egui app: window, editor widget, explorer, overlays, menus, translations
+crates/codigo-engine     documents (buffer + syntax + file), commands, settings, session
+crates/codigo-syntax     languages and tree-sitter highlighting
+crates/codigo-lsp        language server client (protocol, off-thread transport, server registry)
 crates/codigo-workspace  folder walk, tree, fuzzy matching, project search, git status
-crates/codigo-text     rope buffer, selections, edits, history, motions, search, encodings
+crates/codigo-text       rope buffer, selections, edits, history, motions, search, encodings
 ```
 
 Dependencies point down only. The engine knows nothing about egui, so another front end (a terminal
