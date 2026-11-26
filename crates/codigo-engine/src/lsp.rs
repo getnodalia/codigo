@@ -11,8 +11,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use codigo_lsp::{
-    path_to_uri, server_for, spawn_with, uri_to_path, utf16_to_char, Diagnostic, Event, ServerSpec,
-    Severity, SpawnError, Spawned, Waker,
+    char_to_utf16, parse_completion, parse_hover, parse_locations, path_to_uri, server_for,
+    spawn_with, uri_to_path, utf16_to_char, CompletionItem, Diagnostic, Event, Pending, Position,
+    ServerSpec, Severity, SpawnError, Spawned, Waker,
 };
 
 use crate::document::Document;
@@ -60,6 +61,73 @@ pub struct Mark {
 pub struct Counts {
     pub errors: usize,
     pub warnings: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryKind {
+    Definition,
+    Hover,
+    Completion,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryError {
+    /// No server handles this document's language.
+    NoServer,
+    /// The server is still starting, missing or stopped, or has not been sent this document yet.
+    NotReady,
+}
+
+/// Somewhere in a file, as the protocol counts it: a line and a UTF-16 column. Turn the column
+/// into chars with [`char_in_line`] once the file's text is at hand.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Place {
+    pub path: PathBuf,
+    pub line: usize,
+    pub character: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Places(Vec<Place>),
+    Hover(Option<String>),
+    Completion(Vec<CompletionItem>),
+}
+
+/// A request in flight. Poll it from the frame loop.
+pub struct Query {
+    pub kind: QueryKind,
+    pending: Pending,
+}
+
+impl Query {
+    /// `None` while the server is still working.
+    pub fn poll(&self) -> Option<Result<Answer, String>> {
+        let reply = self.pending.poll()?;
+        Some(reply.map_err(|e| e.message).map(|value| {
+            match self.kind {
+                QueryKind::Definition => Answer::Places(
+                    parse_locations(&value)
+                        .into_iter()
+                        .filter_map(|l| {
+                            Some(Place {
+                                path: uri_to_path(&l.uri)?,
+                                line: l.range.start.line as usize,
+                                character: l.range.start.character,
+                            })
+                        })
+                        .collect(),
+                ),
+                QueryKind::Hover => Answer::Hover(parse_hover(&value)),
+                QueryKind::Completion => Answer::Completion(parse_completion(&value)),
+            }
+        }))
+    }
+}
+
+/// The char column that sits `utf16` units into `text`'s line `line`.
+pub fn char_in_line(doc: &Document, line: usize, utf16: u32) -> usize {
+    utf16_to_char(&doc.buffer().line_text(line), utf16)
 }
 
 type Started = Result<Spawned, StartError>;
@@ -397,6 +465,50 @@ impl Hub {
             .collect();
         marks.sort_by_key(|m| (m.line, m.start));
         marks
+    }
+
+    /// Ask the server for `kind` of answer at char offset `at` in `doc`. Edits not yet sent are
+    /// sent first, so the server answers about the text the person sees.
+    pub fn query(
+        &mut self,
+        doc: &Document,
+        at: usize,
+        kind: QueryKind,
+    ) -> Result<Query, QueryError> {
+        let path = doc.path().ok_or(QueryError::NoServer)?;
+        let spec = server_for(doc.language().id).ok_or(QueryError::NoServer)?;
+        let Some(Slot::Running(running)) = self.servers.get(spec.command) else {
+            return Err(QueryError::NotReady);
+        };
+        let synced = self.docs.get_mut(path).ok_or(QueryError::NotReady)?;
+        let buffer = doc.buffer();
+        if synced.dirty {
+            synced.version = synced.version.saturating_add(1);
+            let sent =
+                running
+                    .server
+                    .client
+                    .did_change(&synced.uri, synced.version, &buffer.text());
+            synced.sent = Instant::now();
+            synced.dirty = sent.is_err();
+        }
+        let (line, col) = buffer.line_col(at);
+        let position = Position {
+            line: u32::try_from(line).unwrap_or(u32::MAX),
+            character: char_to_utf16(&buffer.line_text(line), col),
+        };
+        let method = match kind {
+            QueryKind::Definition => "textDocument/definition",
+            QueryKind::Hover => "textDocument/hover",
+            QueryKind::Completion => "textDocument/completion",
+        };
+        Ok(Query {
+            kind,
+            pending: running
+                .server
+                .client
+                .at_position(method, &synced.uri, position),
+        })
     }
 
     /// One entry per server that was asked for, for the status bar.

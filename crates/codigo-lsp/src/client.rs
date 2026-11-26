@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 
 use crate::diagnostics::{parse_list, Diagnostic};
 use crate::framing::{read_message, write_message, FrameError};
+use crate::position::Position;
 
 /// Called from the reader thread after the server sent something.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -223,6 +224,14 @@ impl Client {
         self.notify(
             "textDocument/didClose",
             json!({"textDocument": {"uri": uri}}),
+        )
+    }
+
+    /// `textDocument/definition`, `hover` or `completion` at a position.
+    pub fn at_position(&self, method: &str, uri: &str, position: Position) -> Pending {
+        self.request(
+            method,
+            json!({"textDocument": {"uri": uri}, "position": position}),
         )
     }
 

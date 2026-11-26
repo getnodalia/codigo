@@ -77,6 +77,8 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(DuplicateLineDown),
                 some(DeleteLine),
                 some(JoinLines),
+                None,
+                some(TriggerCompletion),
             ]),
         ),
         (
@@ -111,6 +113,8 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
             items(&[
                 some(QuickOpen),
                 some(GoToLine),
+                some(GoToDefinition),
+                some(ShowHover),
                 None,
                 some(NextTab),
                 some(PreviousTab),

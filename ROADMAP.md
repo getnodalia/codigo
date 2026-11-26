@@ -7,24 +7,39 @@ file lists what exists and what does not. Nothing under "Next" is available yet.
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion and go to definition, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
 1. **Language servers (LSP).** Diagnostics, hover, completion, go to definition, references, rename
    and formatting, with servers started per language from the user's PATH or settings. The
    `codigo-lsp` crate (protocol client, off-thread transport, server registry) and the engine's
-   `Hub` run: diagnostics show as underlines, tooltips and status bar counts. Hover, completion,
-   go to definition, references, rename and formatting are still to do.
-2. **Integrated terminal.** A pty-backed terminal panel (`codigo-term`) with tabs and the project
-   folder as its working directory.
-3. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`
+   `Hub` run: diagnostics show as underlines, tooltips and status bar counts, and hover, completion
+   and go to definition work. References, rename and formatting are still to do.
+2. **File-type icons.** Every file in the explorer, the tabs and quick open gets an icon drawn for
+   its language (Rust, JavaScript, Python, Markdown, TOML and the rest of the highlighted ones),
+   in the Nodalia icon style and original to Código, so files are told apart at a glance.
+3. **Run console and integrated terminal.** A pty-backed terminal panel (`codigo-term`) with tabs
+   and the project folder as its working directory, plus a run console that shows the output of
+   the program being built or run, with clickable errors that jump to the line, and tasks per
+   project.
+4. **Code quality and security, built in.** Direct analysis with no server to run, in the style of
+   SonarQube: the language servers' diagnostics and each language's own linters (clippy and
+   others), plus Código's own rules for complexity, duplication, long functions, dead code and
+   common vulnerabilities (hard-coded secrets, unsafe patterns, dependency advisories). A Quality
+   panel lists findings by severity, a gate summarises the project, and fixes apply from the
+   editor.
+5. **Tools for building Nodalia apps.** Project templates for NDL apps, a component and theme
+   preview, helpers for tokens, icons and Spanish catalogs, and checks for the Nodalia
+   engineering rules (no unwrap, strings through i18n, colours from tokens) so the editor helps
+   keep every app coherent.
+6. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`
    crate, with the provider chosen by the user and keys kept in the system keyring. Nothing leaves
-   the computer without being asked.
-4. **Git in the editor.** Changes view, diff gutter, stage, commit and branch switching.
-5. **Debugging** through the Debug Adapter Protocol, tasks, snippets, split editors and a
-   minimap.
-6. **Release packages**: AppImage, .deb and .rpm, a macOS DMG with its own install window, a Windows
+   the computer without being asked. Review of a change for quality and security comes with it.
+7. **Git in the editor.** Changes view, diff gutter, stage, commit and branch switching.
+8. **Debugging** through the Debug Adapter Protocol, snippets, split editors and a minimap, with
+   lighter parsing and a memory budget for very large files.
+9. **Release packages**: AppImage, .deb and .rpm, a macOS DMG with its own install window, a Windows
    installer, the website page and a Nodalia Launcher entry.
 
 ## Known gaps

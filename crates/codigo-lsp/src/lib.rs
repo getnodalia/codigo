@@ -19,11 +19,15 @@ pub mod client;
 pub mod diagnostics;
 pub mod framing;
 pub mod position;
+pub mod requests;
 pub mod servers;
 
 pub use client::{Client, ClientError, Event, Pending, ResponseError, Waker};
 pub use diagnostics::{Diagnostic, Severity};
 pub use position::{char_to_utf16, path_to_uri, uri_to_path, utf16_to_char, Position, Range};
+pub use requests::{
+    parse_completion, parse_hover, parse_locations, strip_snippet, CompletionItem, Location,
+};
 pub use servers::{
     find_executable, server_for, spawn, spawn_with, ServerSpec, SpawnError, Spawned, SERVERS,
 };

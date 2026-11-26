@@ -24,6 +24,7 @@ mod icon;
 mod layout;
 #[cfg(target_os = "linux")]
 mod linux_menu;
+mod lsp_ui;
 mod menu;
 mod overlays;
 mod spanish;

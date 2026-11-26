@@ -105,6 +105,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     status_bar(ui, status, app, &look, &mut acts);
 
     overlays::show(&ctx, app, &look);
+    crate::lsp_ui::show(&ctx, app, &look);
     toasts(ui, app, &look);
     if ndl {
         chrome::resize_edges(ui, full);

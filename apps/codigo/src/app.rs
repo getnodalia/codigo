@@ -118,6 +118,10 @@ pub struct App {
     pub project: Option<Project>,
     /// Language servers and what they reported.
     pub lsp: Hub,
+    /// A language-server question waiting for its answer.
+    pub query: Option<crate::lsp_ui::InFlight>,
+    /// The hover or completion popup next to the caret.
+    pub popup: crate::lsp_ui::Popup,
     pub panel: Panel,
     pub sidebar_visible: bool,
     pub sidebar_width: f32,
@@ -168,6 +172,8 @@ impl App {
             next_id: 1,
             project: None,
             lsp,
+            query: None,
+            popup: crate::lsp_ui::Popup::None,
             panel: Panel::Explorer,
             sidebar_visible: true,
             sidebar_width: 280.0,
@@ -858,6 +864,11 @@ impl App {
                     self.overlay = Overlay::go_to_line();
                 }
             }
+            GoToDefinition => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Definition, false),
+            ShowHover => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Hover, false),
+            TriggerCompletion => {
+                crate::lsp_ui::ask(self, codigo_engine::QueryKind::Completion, false)
+            }
             NextTab => {
                 if !self.tabs.is_empty() {
                     self.active = (self.active + 1) % self.tabs.len();
@@ -1215,6 +1226,7 @@ impl App {
         if out.edited {
             self.last_edit = Some(Instant::now());
         }
+        crate::lsp_ui::update(self, out.edited);
         for cmd in out.commands {
             self.run(ctx, cmd);
         }
@@ -1307,6 +1319,7 @@ impl eframe::App for App {
         self.updates.tick(&ctx);
         self.poll();
         self.sync_language_servers();
+        crate::lsp_ui::poll(self);
         self.external_changes();
 
         let decorated = !self.ndl_controls();
@@ -1330,6 +1343,7 @@ impl eframe::App for App {
         let editor_focus = self.tabs.get(self.active).is_some_and(|t| {
             ctx.memory(|m| m.has_focus(egui::Id::unique(("codigo-editor", t.doc.id().0))))
         });
+        crate::lsp_ui::keys(self, &ctx);
         self.shortcuts(&ctx, editor_focus);
         self.refresh_find();
 

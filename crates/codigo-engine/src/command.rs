@@ -317,6 +317,7 @@ commands! {
     DuplicateLineDown => ("edit.duplicateLineDown", "Duplicate line down", Edit, alt_shift(Key::Down)),
     DeleteLine => ("edit.deleteLine", "Delete line", Edit, ctrl_shift(Key::K)),
     JoinLines => ("edit.joinLines", "Join lines", Edit, ctrl(Key::J)),
+    TriggerCompletion => ("edit.complete", "Suggest completions", Edit, ctrl(Key::Space)),
     OpenLineBelow => ("edit.openLineBelow", "Insert line below", Edit, ctrl(Key::Enter)),
     OpenLineAbove => ("edit.openLineAbove", "Insert line above", Edit, Some(Shortcut::new(true, true, false, Key::Enter))),
     TrimTrailingWhitespace => ("edit.trimWhitespace", "Trim trailing whitespace", Edit, NONE),
@@ -342,6 +343,8 @@ commands! {
 
     QuickOpen => ("go.quickOpen", "Go to file…", Go, ctrl(Key::P)),
     GoToLine => ("go.line", "Go to line…", Go, ctrl(Key::G)),
+    GoToDefinition => ("go.definition", "Go to definition", Go, plain(Key::F12)),
+    ShowHover => ("go.hover", "Show information about the symbol", Go, ctrl_shift(Key::Space)),
     NextTab => ("go.nextTab", "Next tab", Go, Some(Shortcut::new(true, false, false, Key::PageDown))),
     PreviousTab => ("go.previousTab", "Previous tab", Go, Some(Shortcut::new(true, false, false, Key::PageUp))),
 
