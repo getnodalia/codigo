@@ -1,0 +1,34 @@
+[package]
+name = "codigo-syntax"
+description = "Código's syntax layer: languages, tree-sitter parsing and highlighting."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+codigo-text.workspace = true
+ropey.workspace = true
+tree-sitter.workspace = true
+streaming-iterator.workspace = true
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-json = "0.24"
+tree-sitter-toml-ng = "0.7"
+tree-sitter-md = "0.5"
+tree-sitter-bash = "0.25"
+tree-sitter-c = "0.24"
+tree-sitter-cpp = "0.23"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-html = "0.23"
+tree-sitter-css = "0.25"
+tree-sitter-yaml = "0.7"
+
+[lints]
+workspace = true

@@ -1,0 +1,52 @@
+# Código
+
+Código is Nodalia's code editor: a fast, native editor for any language, drawn in the Nodalia
+Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
+
+> Código is at an early stage (0.1, in development). This page describes only what runs today;
+> what is planned is in [ROADMAP.md](ROADMAP.md).
+
+## What it does today
+
+- **A text editor built for speed.** Only the rows on screen are laid out, so a file of a million
+  lines (45 MB) opens and scrolls without trouble. Multiple cursors and selections, word wrap, find and replace with a
+  match count, line operations (move, duplicate, delete, join, comment, indent), unlimited undo and
+  Unicode that behaves: grapheme-aware movement, wide characters, and the file's encoding and line
+  endings kept when you save.
+- **Syntax highlighting for 15 languages** through tree-sitter: Rust, Python, JavaScript,
+  TypeScript, JSON, TOML, Markdown, Bash, C, C++, Go, Java, HTML, CSS and YAML. Other files open as
+  plain text, and the status bar lets you pick a language by hand.
+- **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
+  in colour, quick open by fuzzy file name (`Ctrl+P`), search across the project (`Ctrl+Shift+F`)
+  and a command palette (`Ctrl+Shift+P`) that reaches every command.
+- **Pick up where you left off.** Tabs, the folder, the sidebar and recent folders come back at the
+  next launch.
+- **Nodalia Design.** Light, dark and high-contrast themes, round window controls on Linux (native
+  ones on macOS and Windows), a global menu over D-Bus on Linux, a reduced-motion option and an
+  in-app update check.
+- **Spanish and English**, following your system language or your choice in Preferences.
+
+## Build
+
+```bash
+cargo run -p codigo-app -- path/to/folder-or-file
+```
+
+Linux needs the usual development packages for windowing (`libxkbcommon`, `libwayland`, `libx11`,
+`libgl`, `libfontconfig`, `libdbus`). The gate that CI runs:
+
+```bash
+cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked
+```
+
+## Layout
+
+`crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
+(languages and highlighting), `crates/codigo-workspace` (folders, fuzzy matching, project search,
+git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
+app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
+
+## Licence
+
+`MIT OR Apache-2.0` ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)). Assets and their
+licences are listed in [ATTRIBUTION.md](ATTRIBUTION.md).

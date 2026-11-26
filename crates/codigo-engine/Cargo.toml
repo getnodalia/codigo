@@ -1,0 +1,26 @@
+[package]
+name = "codigo-engine"
+description = "Código's engine: documents, commands, settings and session. Draws nothing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+codigo-text.workspace = true
+codigo-syntax.workspace = true
+codigo-workspace.workspace = true
+ropey.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+directories.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

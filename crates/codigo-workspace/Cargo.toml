@@ -1,0 +1,20 @@
+[package]
+name = "codigo-workspace"
+description = "Código's view of a project folder: file tree, quick-open matcher, project search and git."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+codigo-text.workspace = true
+ignore.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
