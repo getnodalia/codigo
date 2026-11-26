@@ -103,6 +103,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(ToggleTerminal),
                 some(NewTerminal),
                 some(CloseTerminal),
+                some(ShowProblems),
                 some(ToggleWordWrap),
                 some(ToggleWhitespace),
                 None,

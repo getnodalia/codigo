@@ -48,6 +48,7 @@ pub enum Panel {
     Explorer,
     Search,
     Quality,
+    Problems,
 }
 
 /// The find bar's state.
@@ -906,6 +907,10 @@ impl App {
             ZoomReset => {
                 self.settings.font_size = 14.0;
                 self.save_settings();
+            }
+            ShowProblems => {
+                self.sidebar_visible = true;
+                self.panel = Panel::Problems;
             }
             FocusEditor => self.focus_editor = true,
             FocusExplorer => {

@@ -18,11 +18,14 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   plain text, and the status bar lets you pick a language by hand.
 - **Errors as you type.** With a language server installed (rust-analyzer, pyright, gopls,
   clangd, typescript-language-server and others), Código underlines what it reports, shows the
-  message under the pointer and counts errors and warnings in the status bar. It never installs a
+  message under the pointer and counts errors and warnings in the status bar. The Problems panel
+  (`Ctrl+Shift+M`, or a click on the counts) lists them for every file, errors first, and a click
+  opens the place. It never installs a
   server for you, and the setting can be turned off in Preferences. Hover (`Ctrl+Shift+Space`),
   completion (`Ctrl+Space`, and as you type) and go to definition (`F12`) work too; references,
   rename and formatting are not there yet.
-- **A terminal and a run console.** `Ctrl+\`` opens a real terminal under the editor, with tabs,
+- **A terminal and a run console.** The top bar has Run, Stop and Terminal buttons next to the
+  palette. `Ctrl+\`` opens a real terminal under the editor, with tabs,
   colours, history and the project folder as its working directory. `F5` runs the project
   (`cargo run`, `npm start`, `go run .`, `python main.py` and more, chosen from what the folder
   contains) in a tab of its own, and Build, Test and Check are in the Run menu. A
