@@ -15,11 +15,13 @@
 
 mod api;
 pub mod device;
+mod diff;
 mod http;
 mod model;
 pub mod secret;
 
 pub use api::{Api, LinePlace, NewPull, ReviewEvent, Scope};
+pub use diff::{diff_lines, DiffKind, DiffLine};
 pub use model::{
     parse_remote, Check, Comment, CommentKind, Issue, Pull, PullDetail, PullFile, RepoInfo,
     ReviewComment, User,

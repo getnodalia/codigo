@@ -21,6 +21,7 @@ codigo-workspace.workspace = true
 codigo-engine.workspace = true
 codigo-term.workspace = true
 codigo-dap.workspace = true
+codigo-ai.workspace = true
 codigo-git.workspace = true
 codigo-github.workspace = true
 codigo-quality.workspace = true

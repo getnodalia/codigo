@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use codigo_git::{Auth, Branch, Change, Commit, Kind, Repo, RepoStatus};
+use codigo_git::{Auth, Branch, Change, Commit, Kind, Repo, RepoStatus, Stash};
 use egui::{Align, Align2, FontId, Layout, RichText, ScrollArea, Sense, Ui};
 use nodalia_theme::creator::{self as cr, Look};
 use nodalia_theme::font_size;
@@ -30,8 +30,15 @@ pub enum GitMsg {
         remote: Option<(String, String)>,
         result: Result<RepoStatus, String>,
         log: Vec<Commit>,
+        stashes: Vec<Stash>,
+        merging: bool,
     },
     Branches(Vec<Branch>),
+    /// A conflicted file read from disk, or why not.
+    Conflicted {
+        path: String,
+        result: Result<String, String>,
+    },
     Diff {
         title: String,
         result: Result<String, String>,
@@ -51,6 +58,11 @@ pub struct GitPanel {
     pub known: bool,
     pub status: Option<RepoStatus>,
     pub log: Vec<Commit>,
+    pub stashes: Vec<Stash>,
+    /// A merge is waiting to be finished or abandoned.
+    pub merging: bool,
+    /// The stash whose drop is waiting for a second click.
+    pub confirm_drop: Option<usize>,
     pub branches: Vec<Branch>,
     pub error: Option<String>,
     pub message: String,
@@ -69,13 +81,25 @@ pub struct DiffView {
     pub text: Option<Result<String, String>>,
     /// A file to open from the window, when the diff is of one on disk.
     pub open: Option<PathBuf>,
+    /// The change this is the diff of, when its hunks can be staged one by one.
+    pub change: Option<(Change, bool)>,
 }
 
-/// Picking, or making, a branch.
+/// What to do with one hunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HunkAct {
+    Stage,
+    Unstage,
+    Discard,
+}
+
+/// Picking, or making, a branch; or picking the branch to merge.
 #[derive(Default)]
 pub struct BranchSetup {
     pub query: String,
     pub focus: bool,
+    /// Merge the pick into the current branch instead of switching to it.
+    pub merge: bool,
 }
 
 impl BranchSetup {
@@ -83,6 +107,7 @@ impl BranchSetup {
         BranchSetup {
             query: String::new(),
             focus: true,
+            merge: false,
         }
     }
 }
@@ -123,6 +148,8 @@ pub fn refresh(app: &mut App) {
                 remote: None,
                 result: Err(String::new()),
                 log: Vec::new(),
+                stashes: Vec::new(),
+                merging: false,
             };
         };
         let remote = repo
@@ -130,6 +157,8 @@ pub fn refresh(app: &mut App) {
             .and_then(|u| codigo_github::parse_remote(&u));
         let result = repo.status().map_err(|e| e.to_string());
         let log = repo.log(30).unwrap_or_default();
+        let stashes = repo.stashes().unwrap_or_default();
+        let merging = repo.merging();
         GitMsg::Status {
             serial,
             dir,
@@ -137,8 +166,36 @@ pub fn refresh(app: &mut App) {
             remote,
             result,
             log,
+            stashes,
+            merging,
         }
     });
+}
+
+/// Run something that is not git (writing a file) and refresh when it is done.
+pub fn run_job(
+    app: &mut App,
+    what: &'static str,
+    work: impl FnOnce() -> Result<String, String> + Send + 'static,
+) {
+    if app.vcs.busy.is_some() {
+        app.toast(tr("Git is busy; wait for it to finish."));
+        return;
+    }
+    app.vcs.busy = Some(what);
+    spawn(app, move || GitMsg::Done {
+        what,
+        result: work(),
+    });
+}
+
+/// [`op`], for the windows that open from this panel.
+pub fn run_repo(
+    app: &mut App,
+    what: &'static str,
+    work: impl FnOnce(&Repo, &Auth) -> codigo_git::Result<String> + Send + 'static,
+) {
+    op(app, what, work);
 }
 
 /// Run something in the repository, then refresh.
@@ -175,6 +232,8 @@ pub fn on_msg(app: &mut App, msg: GitMsg) {
             remote,
             result,
             log,
+            stashes,
+            merging,
         } => {
             if serial != app.vcs.serial {
                 return;
@@ -194,8 +253,11 @@ pub fn on_msg(app: &mut App, msg: GitMsg) {
                 }
             }
             app.vcs.log = log;
+            app.vcs.stashes = stashes;
+            app.vcs.merging = merging;
         }
         GitMsg::Branches(list) => app.vcs.branches = list,
+        GitMsg::Conflicted { path, result } => crate::conflict_ui::loaded(app, path, result),
         GitMsg::Diff { title, result } => {
             if let Overlay::Diff(d) = &mut app.overlay {
                 if d.title == title {
@@ -218,6 +280,12 @@ pub fn on_msg(app: &mut App, msg: GitMsg) {
             }
             refresh(app);
             app.refresh_git();
+            // A hunk just moved: the diff on screen shows what is left.
+            if let Overlay::Diff(d) = &app.overlay {
+                if let Some((change, staged)) = d.change.clone() {
+                    reopen_diff(app, &change, staged);
+                }
+            }
         }
     }
 }
@@ -283,6 +351,79 @@ pub fn fetch(app: &mut App) {
     op(app, "Fetched", |repo, auth| {
         repo.fetch(auth).map(|()| String::new())
     });
+}
+
+pub fn stash(app: &mut App) {
+    if app.vcs.status.as_ref().is_none_or(|s| s.changes.is_empty()) {
+        app.toast(tr("Nothing to stash. The working tree is clean."));
+        return;
+    }
+    app.save_all();
+    op(app, "Stashed the changes", |repo, _| {
+        repo.stash_push("").map(|()| String::new())
+    });
+}
+
+pub fn stash_pop(app: &mut App) {
+    if app.vcs.stashes.is_empty() {
+        app.toast(tr("There is nothing stashed."));
+        return;
+    }
+    op(app, "Applied the stash", |repo, _| {
+        repo.stash_pop(0).map(|()| String::new())
+    });
+}
+
+fn stash_apply(app: &mut App, index: usize) {
+    op(app, "Applied the stash", move |repo, _| {
+        repo.stash_apply(index).map(|()| String::new())
+    });
+}
+
+fn stash_drop(app: &mut App, index: usize) {
+    op(app, "Dropped the stash", move |repo, _| {
+        repo.stash_drop(index).map(|()| String::new())
+    });
+}
+
+pub fn open_merge(app: &mut App) {
+    open_branches(app);
+    if let Overlay::Branch(b) = &mut app.overlay {
+        b.merge = true;
+    }
+}
+
+pub fn merge_abort(app: &mut App) {
+    if !app.vcs.merging {
+        app.toast(tr("No merge is in progress."));
+        return;
+    }
+    op(app, "Aborted the merge", |repo, _| {
+        repo.merge_abort().map(|()| String::new())
+    });
+}
+
+fn merge(app: &mut App, name: String) {
+    op(app, "Merged", move |repo, _| {
+        repo.merge(&name).map(|()| String::new())
+    });
+}
+
+/// Stage, unstage or discard one hunk of the file the diff window shows.
+fn hunk_op(app: &mut App, change: &Change, staged: bool, index: usize, act: HunkAct) {
+    let path = change.path.clone();
+    match act {
+        HunkAct::Stage => op(app, "Staged the hunk", move |repo, _| {
+            repo.stage_hunk(&path, index).map(|()| String::new())
+        }),
+        HunkAct::Unstage => op(app, "Unstaged the hunk", move |repo, _| {
+            repo.unstage_hunk(&path, index).map(|()| String::new())
+        }),
+        HunkAct::Discard => op(app, "Discarded the hunk", move |repo, _| {
+            repo.discard_hunk(&path, index).map(|()| String::new())
+        }),
+    }
+    let _ = staged;
 }
 
 pub fn init(app: &mut App) {
@@ -351,7 +492,30 @@ fn open_diff(app: &mut App, change: &Change, staged: bool) {
         title: title.clone(),
         text: None,
         open: Some(root.join(&change.path)),
+        // Hunks can be moved one by one for files git already knows.
+        change: (change.kind() != Kind::Untracked && !change.conflicted)
+            .then(|| (change.clone(), staged)),
     });
+    let change = change.clone();
+    spawn(app, move || GitMsg::Diff {
+        title,
+        result: match Repo::discover(&root) {
+            Some(repo) => repo.diff(&change, staged).map_err(|e| e.to_string()),
+            None => Err("the repository is gone".to_owned()),
+        },
+    });
+}
+
+/// Read the diff again after a hunk moved, keeping the window as it is.
+fn reopen_diff(app: &mut App, change: &Change, staged: bool) {
+    let Some(root) = app.vcs.root.clone() else {
+        return;
+    };
+    let title = if staged {
+        format!("{} ({})", change.path, tr("staged"))
+    } else {
+        change.path.clone()
+    };
     let change = change.clone();
     spawn(app, move || GitMsg::Diff {
         title,
@@ -426,6 +590,9 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
         return out;
     };
     toolbar(ui, app, look, &status);
+    if app.vcs.merging {
+        merge_banner(ui, app, look, &status);
+    }
     ui.add_space(6.0);
     commit_box(ui, app, look, &status);
     if app.vcs.busy.is_some() {
@@ -470,9 +637,98 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
                         .color(color(p.text_secondary)),
                 );
             }
+            stashes(ui, app, look);
             history(ui, app, look);
         });
     out
+}
+
+/// A merge is in the middle: say so, and what to do about it.
+fn merge_banner(ui: &mut Ui, app: &mut App, look: &Look, status: &RepoStatus) {
+    let p = look.palette;
+    let left = status.changes.iter().filter(|c| c.conflicted).count();
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new(if left > 0 {
+            trf(
+                "Merging: {} files still have conflicts.",
+                &[&left.to_string()],
+            )
+        } else {
+            tr("Merging: all conflicts are resolved. Commit to finish.").to_owned()
+        })
+        .size(font_size::SMALL)
+        .color(color(if left > 0 {
+            p.status_danger_fg
+        } else {
+            p.status_success_fg
+        })),
+    );
+    if cr::secondary_button(ui, look, tr("Abort the merge"), app.vcs.busy.is_none()).clicked() {
+        merge_abort(app);
+    }
+}
+
+fn stashes(ui: &mut Ui, app: &mut App, look: &Look) {
+    if app.vcs.stashes.is_empty() {
+        return;
+    }
+    let p = look.palette;
+    section(
+        ui,
+        look,
+        &trf("Stashes ({})", &[&app.vcs.stashes.len().to_string()]),
+    );
+    let list = app.vcs.stashes.clone();
+    for st in &list {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let room = (ui.available_width() - 56.0).max(40.0);
+            ui.allocate_ui(egui::vec2(room, 20.0), |ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&st.message)
+                            .size(font_size::SMALL)
+                            .color(color(p.text_primary)),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(&st.message);
+            });
+            let armed = app.vcs.confirm_drop == Some(st.index);
+            if small_icon_button(
+                ui,
+                look,
+                if armed { "check" } else { "delete" },
+                if armed {
+                    tr("Click again to drop this stash")
+                } else {
+                    tr("Drop the stash")
+                },
+                armed,
+            )
+            .clicked()
+            {
+                if armed {
+                    app.vcs.confirm_drop = None;
+                    stash_drop(app, st.index);
+                } else {
+                    app.vcs.confirm_drop = Some(st.index);
+                }
+            }
+            if small_icon_button(
+                ui,
+                look,
+                "archive",
+                tr("Apply the stash and keep it"),
+                false,
+            )
+            .clicked()
+            {
+                stash_apply(app, st.index);
+            }
+        });
+    }
 }
 
 fn not_a_repo(ui: &mut Ui, app: &mut App, look: &Look) {
@@ -514,6 +770,28 @@ fn toolbar(ui: &mut Ui, app: &mut App, look: &Look, status: &RepoStatus) {
         crate::widgets::trailing(ui, |ui| {
             if small_icon_button(ui, look, "refresh", tr("Refresh"), false).clicked() {
                 refresh(app);
+            }
+            if small_icon_button(
+                ui,
+                look,
+                "compare",
+                tr("Merge a branch into this one"),
+                false,
+            )
+            .clicked()
+            {
+                open_merge(app);
+            }
+            if small_icon_button(
+                ui,
+                look,
+                "archive",
+                tr("Stash the changes"),
+                !app.vcs.stashes.is_empty(),
+            )
+            .clicked()
+            {
+                stash(app);
             }
             if small_icon_button(ui, look, "arrow-up", tr("Push"), status.ahead > 0).clicked() {
                 push(app);
@@ -661,6 +939,12 @@ fn change_row(
                     app.vcs.confirm_discard = Some(change.path.clone());
                 }
             }
+            if change.conflicted
+                && small_icon_button(ui, look, "pencil", tr("Resolve the conflicts"), true)
+                    .clicked()
+            {
+                crate::conflict_ui::open(app, change.path.clone());
+            }
             if small_icon_button(ui, look, "add", tr("Stage"), false).clicked() {
                 let path = vec![change.path.clone()];
                 op(app, "Staged", move |repo, _| {
@@ -723,6 +1007,7 @@ pub fn diff_overlay(ctx: &egui::Context, app: &mut App, look: &Look, view: DiffV
     let p = look.palette;
     let mut closed = false;
     let mut open = false;
+    let mut hunk: Option<(usize, HunkAct)> = None;
     let dismissed = modal(ctx, look, "diff", 920.0, true, |ui| {
         closed = heading(ui, look, &view.title, "diff");
         match &view.text {
@@ -735,12 +1020,18 @@ pub fn diff_overlay(ctx: &egui::Context, app: &mut App, look: &Look, view: DiffV
             Some(Ok(text)) if text.trim().is_empty() => {
                 ui.label(RichText::new(tr("No changes to show.")).color(color(p.text_secondary)));
             }
-            Some(Ok(text)) => diff_text(
-                ui,
-                look,
-                text,
-                (ctx.content_rect().height() - 260.0).max(200.0),
-            ),
+            Some(Ok(text)) => {
+                let mode = view.change.as_ref().map(|(_, staged)| *staged);
+                if let Some(act) = diff_text_hunks(
+                    ui,
+                    look,
+                    text,
+                    (ctx.content_rect().height() - 260.0).max(200.0),
+                    mode,
+                ) {
+                    hunk = Some(act);
+                }
+            }
         }
         if view.open.as_ref().is_some_and(|p| p.is_file()) {
             ui.add_space(8.0);
@@ -759,6 +1050,9 @@ pub fn diff_overlay(ctx: &egui::Context, app: &mut App, look: &Look, view: DiffV
     }
     if closed || dismissed {
         return (Overlay::None, true);
+    }
+    if let (Some((index, act)), Some((change, staged))) = (hunk, view.change.clone()) {
+        hunk_op(app, &change, staged, index, act);
     }
     (Overlay::Diff(view), false)
 }
@@ -788,6 +1082,101 @@ pub fn diff_text(ui: &mut Ui, look: &Look, text: &str, max_height: f32) {
         });
 }
 
+/// A unified diff like [`diff_text`], with buttons on each hunk when `staged` says which side of
+/// the index it is the diff of (`None` for a diff that cannot be changed).
+fn diff_text_hunks(
+    ui: &mut Ui,
+    look: &Look,
+    text: &str,
+    max_height: f32,
+    staged: Option<bool>,
+) -> Option<(usize, HunkAct)> {
+    let Some(staged) = staged else {
+        diff_text(ui, look, text, max_height);
+        return None;
+    };
+    let p = look.palette;
+    let lines: Vec<&str> = text.lines().take(20_000).collect();
+    // Which hunk each line belongs to, counted the way `codigo_git::parse_diff` counts.
+    let mut hunk_of: Vec<Option<usize>> = Vec::with_capacity(lines.len());
+    let mut seen = 0usize;
+    for l in &lines {
+        if l.starts_with("@@ ") {
+            seen += 1;
+        }
+        hunk_of.push(seen.checked_sub(1));
+    }
+    let font = FontId::monospace(font_size::SMALL);
+    let row = ui.fonts_mut(|f| f.row_height(&font)).max(22.0);
+    let mut chosen = None;
+    ScrollArea::both()
+        .id_salt(("diff-scroll", lines.len()))
+        .max_height(max_height)
+        .auto_shrink([false, true])
+        .show_rows(ui, row, lines.len(), |ui, range| {
+            for i in range {
+                let Some(line) = lines.get(i) else { continue };
+                let tint = match line.chars().next() {
+                    Some('+') if !line.starts_with("+++") => color(p.status_success_fg),
+                    Some('-') if !line.starts_with("---") => color(p.status_danger_fg),
+                    Some('@') => color(p.status_info_fg),
+                    _ => color(p.text_secondary),
+                };
+                if line.starts_with("@@ ") {
+                    let Some(index) = hunk_of.get(i).copied().flatten() else {
+                        continue;
+                    };
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        ui.add(
+                            egui::Label::new(RichText::new(*line).font(font.clone()).color(tint))
+                                .extend(),
+                        );
+                        let (first, second) = if staged {
+                            (tr("Unstage hunk"), None)
+                        } else {
+                            (tr("Stage hunk"), Some(tr("Discard hunk")))
+                        };
+                        if ui.small_button(first).clicked() {
+                            chosen = Some((
+                                index,
+                                if staged {
+                                    HunkAct::Unstage
+                                } else {
+                                    HunkAct::Stage
+                                },
+                            ));
+                        }
+                        if let Some(second) = second {
+                            // Throwing a hunk away cannot be undone: ask with a second click.
+                            let key = egui::Id::unique("armed-hunk-discard");
+                            let armed = ui.data(|d| d.get_temp::<usize>(key)) == Some(index);
+                            let label = if armed {
+                                tr("Click again to discard")
+                            } else {
+                                second
+                            };
+                            if ui.small_button(label).clicked() {
+                                if armed {
+                                    ui.data_mut(|d| d.remove::<usize>(key));
+                                    chosen = Some((index, HunkAct::Discard));
+                                } else {
+                                    ui.data_mut(|d| d.insert_temp(key, index));
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    ui.add(
+                        egui::Label::new(RichText::new(*line).font(font.clone()).color(tint))
+                            .extend(),
+                    );
+                }
+            }
+        });
+    chosen
+}
+
 pub fn branch_overlay(
     ctx: &egui::Context,
     app: &mut App,
@@ -806,12 +1195,22 @@ pub fn branch_overlay(
         .cloned()
         .collect();
     let exists = app.vcs.branches.iter().any(|b| b.name == query);
-    let can_create = !query.is_empty() && !exists && !query.contains(char::is_whitespace);
+    let can_create =
+        !state.merge && !query.is_empty() && !exists && !query.contains(char::is_whitespace);
     let mut pick: Option<String> = None;
     let mut make: Option<String> = None;
     let mut closed = false;
     let dismissed = modal(ctx, look, "branch", 460.0, true, |ui| {
-        closed = heading(ui, look, tr("Switch branch"), "branch");
+        closed = heading(
+            ui,
+            look,
+            if state.merge {
+                tr("Merge a branch into this one")
+            } else {
+                tr("Switch branch")
+            },
+            "branch",
+        );
         let response = cr::field_frame(look)
             .inner_margin(egui::Margin::symmetric(10, 4))
             .show(ui, |ui| {
@@ -869,7 +1268,11 @@ pub fn branch_overlay(
         return (Overlay::None, true);
     }
     if let Some(name) = pick {
-        switch(app, name);
+        if state.merge {
+            merge(app, name);
+        } else {
+            switch(app, name);
+        }
         return (Overlay::None, true);
     }
     if let Some(name) = make {

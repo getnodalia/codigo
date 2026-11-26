@@ -38,6 +38,7 @@ pub struct Options {
     pub whitespace: bool,
     pub auto_close_pairs: bool,
     pub minimap: bool,
+    pub blame: bool,
 }
 
 /// Per-tab view state that is not part of the document.
@@ -50,6 +51,9 @@ pub struct View {
     pub marks: Vec<LineChange>,
     /// Lines (zero-based) with a breakpoint, sorted, for the gutter.
     pub breakpoints: Vec<usize>,
+    /// Who last changed each line, and the revision of the text that was read, for the blame
+    /// shown after the caret's line.
+    pub blame: Option<std::sync::Arc<(u64, Vec<codigo_git::BlameLine>)>>,
     /// The line the debugger is stopped on, if it is stopped in this file.
     pub exec_line: Option<usize>,
     /// Time of the last edit or caret move, to keep the caret solid while typing.
@@ -791,6 +795,23 @@ fn show_text(
                         y,
                         base_cell,
                     );
+                    // Blame, on the caret's line only, after its text.
+                    if opts.blame && line == caret_line && ri + 1 == laid.rows.len() {
+                        let entry = view
+                            .blame
+                            .as_ref()
+                            .filter(|b| b.0 == buffer.revision())
+                            .and_then(|b| b.1.get(line));
+                        if let Some(entry) = entry {
+                            painter.text(
+                                pos2(x_of(b).max(text_x) + m.cw * 4.0, y + m.row_h / 2.0),
+                                Align2::LEFT_CENTER,
+                                crate::blame_ui::label(entry, crate::blame_ui::now_secs()),
+                                m.font.clone(),
+                                color(p.text_tertiary).gamma_multiply(0.85),
+                            );
+                        }
+                    }
                     // Diagnostics.
                     let first = view.diagnostics.partition_point(|d| d.line < line);
                     for d in view

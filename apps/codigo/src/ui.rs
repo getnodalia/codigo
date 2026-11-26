@@ -470,6 +470,7 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             (Panel::Git, "branch", tr("Source control")),
             (Panel::GitHub, "cloud", tr("GitHub")),
             (Panel::Debug, "bug", tr("Debug")),
+            (Panel::Assistant, "sparkle", tr("Assistant")),
         ] {
             if icon_button(ui, look, glyph, label, app.panel == panel).clicked() {
                 acts.push(Act::Panel(panel));
@@ -494,6 +495,7 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                 Panel::Debug => tr("Debug"),
                 Panel::Git => tr("Source control"),
                 Panel::GitHub => tr("GitHub"),
+                Panel::Assistant => tr("Assistant"),
             },
             |_| {},
         );
@@ -514,6 +516,9 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         }
         Panel::GitHub => {
             crate::github_ui::panel(ui, app, look);
+        }
+        Panel::Assistant => {
+            crate::ai_ui::panel(ui, app, look);
         }
         Panel::Debug => {
             if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {
@@ -1025,6 +1030,7 @@ fn draw_pane(
             split.twin.breakpoints = tab.view.breakpoints.clone();
             split.twin.exec_line = tab.view.exec_line;
             split.twin.marks = tab.view.marks.clone();
+            split.twin.blame = tab.view.blame.clone();
             split.twin.diagnostics = tab.view.diagnostics.clone();
             &mut split.twin
         }
