@@ -45,6 +45,8 @@ pub enum Overlay {
     Shortcuts(String),
     About,
     Confirm(Confirm),
+    RunSetup(crate::setup_ui::RunSetup),
+    DebugSetup(crate::setup_ui::DebugSetup),
 }
 
 impl Overlay {
@@ -259,6 +261,8 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::Shortcuts(filter) => shortcuts(ctx, look, filter),
         Overlay::About => about_window(ctx, look),
         Overlay::Confirm(c) => confirm(ctx, app, look, c),
+        Overlay::RunSetup(s) => crate::setup_ui::run_setup(ctx, app, look, s),
+        Overlay::DebugSetup(s) => crate::setup_ui::debug_setup(ctx, app, look, s),
     };
     // A command run from inside an overlay may have opened another one: keep that.
     if matches!(app.overlay, Overlay::None) && !close {

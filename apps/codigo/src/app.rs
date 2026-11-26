@@ -35,6 +35,8 @@ pub enum Msg {
     Quality(u64, codigo_quality::Report),
     /// The program to debug was built and a debugger found, or why not.
     DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
+    /// Nothing to debug was recognised: ask the person what to start.
+    DebugAsk(u64, String),
     /// A big file was read off the window thread.
     Opened(Opening, Result<Document, OpenError>),
 }
@@ -883,6 +885,7 @@ impl App {
                     }
                 }
                 Msg::DebugSpec(serial, spec) => crate::debug_ui::launch(self, serial, spec),
+                Msg::DebugAsk(serial, note) => crate::debug_ui::ask(self, serial, note),
                 Msg::Search(serial, result) => {
                     if serial == self.psearch.serial {
                         self.psearch.running = false;

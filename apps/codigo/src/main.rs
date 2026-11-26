@@ -33,6 +33,7 @@ mod nodalia_ui;
 mod overlays;
 mod problems_ui;
 mod quality_ui;
+mod setup_ui;
 mod spanish;
 mod syntax_theme;
 mod terminal_ui;
