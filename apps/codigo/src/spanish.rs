@@ -111,6 +111,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Line number (1–{})", "Número de línea (1–{})"),
     ("Line numbers", "Números de línea"),
     ("Line {}, column {}", "Línea {}, columna {}"),
+    ("Loading…", "Cargando…"),
     ("Look for hard-coded secrets, unsafe code, complex functions and copied code.", "Busca secretos escritos en el código, código inseguro, funciones complejas y código copiado."),
     ("Main menu", "Menú principal"),
     ("Major", "Importante"),

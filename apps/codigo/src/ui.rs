@@ -596,6 +596,14 @@ fn explorer(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         });
     });
     let rows = project.explorer.rows();
+    if project.explorer.root_loading() {
+        ui.add_space(8.0);
+        ui.label(
+            RichText::new(tr("Loading…"))
+                .size(font_size::SMALL)
+                .color(color(p.text_tertiary)),
+        );
+    }
     let active_path = app
         .active_doc()
         .and_then(|d| d.path().map(std::path::Path::to_path_buf));
@@ -680,6 +688,15 @@ fn explorer(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                     FontId::proportional(font_size::BODY),
                     ink,
                 );
+                if row.loading {
+                    painter.text(
+                        pos2(rect.right() - 12.0, rect.center().y),
+                        egui::Align2::RIGHT_CENTER,
+                        "…",
+                        FontId::proportional(font_size::BODY),
+                        color(p.text_tertiary),
+                    );
+                }
                 if response.clicked() {
                     if row.entry.is_dir {
                         acts.push(Act::Toggle(row.entry.path.clone()));

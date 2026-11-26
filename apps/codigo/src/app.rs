@@ -2,7 +2,7 @@
 //! The application: its state, the commands, background work and the frame loop.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -154,6 +154,8 @@ pub struct App {
     pub psearch: ProjectSearch,
     pub quality: QualityPanel,
     pub files: Option<(PathBuf, Arc<Vec<String>>)>,
+    /// Stops the walk that lists the folder's files when another folder is opened.
+    files_cancel: Arc<AtomicBool>,
     pub closed: Vec<PathBuf>,
     pub toasts: Vec<Toast>,
     tx: Sender<Msg>,
@@ -208,6 +210,7 @@ impl App {
             psearch: ProjectSearch::default(),
             quality: QualityPanel::default(),
             files: None,
+            files_cancel: Arc::new(AtomicBool::new(false)),
             closed: Vec::new(),
             toasts: Vec::new(),
             tx,
@@ -581,13 +584,17 @@ impl App {
             self.save_settings();
         }
         self.files = None;
+        self.files_cancel.store(true, Ordering::Relaxed);
         self.psearch = ProjectSearch::default();
         self.quality
             .cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.quality = QualityPanel::default();
         self.project = Some(Project {
-            explorer: Explorer::new(root.clone()),
+            explorer: Explorer::new(root.clone(), {
+                let ctx = self.ctx.clone();
+                Arc::new(move || ctx.request_repaint())
+            }),
             root: root.clone(),
             git: None,
         });
@@ -605,6 +612,7 @@ impl App {
         self.quality = QualityPanel::default();
         self.project = None;
         self.files = None;
+        self.files_cancel.store(true, Ordering::Relaxed);
         self.session_dirty = true;
     }
 
@@ -624,9 +632,12 @@ impl App {
         let Some(root) = self.project.as_ref().map(|p| p.root.clone()) else {
             return;
         };
+        // A walk of the folder that was open before has nothing left to say.
+        self.files_cancel.store(true, Ordering::Relaxed);
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.files_cancel = cancel.clone();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
         std::thread::spawn(move || {
-            let cancel = AtomicBool::new(false);
             let files = ws::list_files(&root, 200_000, &cancel)
                 .into_iter()
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
@@ -706,6 +717,9 @@ impl App {
     }
 
     fn poll(&mut self) {
+        if let Some(p) = self.project.as_mut() {
+            p.explorer.poll();
+        }
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Files(root, files) => {
