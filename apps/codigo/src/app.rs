@@ -47,6 +47,8 @@ pub enum Msg {
     Gh(crate::github_ui::GhMsg),
     /// The assistant answered on a worker thread.
     Ai(crate::ai_ui::AiMsg),
+    /// A file chooser was closed, or could not open.
+    Pick(crate::dialogs::Reply),
 }
 
 /// Files above this size are read on a worker thread; smaller ones open before the next frame.
@@ -226,6 +228,10 @@ pub struct App {
     last_edit: Option<Instant>,
     ctx: egui::Context,
     ignore_close: bool,
+    /// A file chooser to open at the start of the next frame.
+    pub pending_pick: Option<crate::dialogs::Request>,
+    /// A file chooser is open on a worker thread.
+    pub picking: bool,
 }
 
 pub fn mode_for(dark: bool, high_contrast: bool) -> Mode {
@@ -313,6 +319,8 @@ impl App {
             last_edit: None,
             ctx: cc.egui_ctx.clone(),
             ignore_close: false,
+            pending_pick: None,
+            picking: false,
         };
         app.apply_appearance(&cc.egui_ctx);
         crate::github_ui::init(&mut app);
@@ -641,14 +649,13 @@ impl App {
         };
         if tab.doc.path().is_none() {
             let name = tab.doc.file_name().unwrap_or_else(|| "untitled.txt".into());
-            let mut dialog = rfd::FileDialog::new().set_file_name(name);
-            if let Some(p) = &self.project {
-                dialog = dialog.set_directory(&p.root);
-            }
-            let Some(path) = dialog.save_file() else {
-                return false;
-            };
-            return self.save_as(index, &path);
+            // The chooser opens on the next frame; the file is saved when a name comes back.
+            let id = tab.doc.id();
+            let mut req = crate::dialogs::Request::new(crate::dialogs::Purpose::SaveAs(id));
+            req.name = Some(name);
+            req.dir = self.project.as_ref().map(|p| p.root.clone());
+            crate::dialogs::request(self, req);
+            return false;
         }
         tab.doc.tidy(trim, newline);
         match tab.doc.save() {
@@ -967,6 +974,7 @@ impl App {
                 Msg::Vcs(msg) => crate::vcs_ui::on_msg(self, msg),
                 Msg::Gh(msg) => crate::github_ui::on_msg(self, msg),
                 Msg::Ai(msg) => crate::ai_ui::on_msg(self, msg),
+                Msg::Pick(reply) => crate::dialogs::on_reply(self, reply),
                 Msg::Marks(path, marks) => {
                     for tab in &mut self.tabs {
                         if tab.doc.path() == Some(path.as_path()) {
@@ -1011,20 +1019,17 @@ impl App {
         match cmd {
             NewFile => self.new_file(),
             OpenFile => {
-                let mut dialog = rfd::FileDialog::new();
-                if let Some(p) = &self.project {
-                    dialog = dialog.set_directory(&p.root);
-                }
-                if let Some(paths) = dialog.pick_files() {
-                    for p in paths {
-                        self.open_path(&p, None, true);
-                    }
-                }
+                let mut req = crate::dialogs::Request::new(crate::dialogs::Purpose::OpenFiles);
+                req.dir = self.project.as_ref().map(|p| p.root.clone());
+                crate::dialogs::request(self, req);
             }
             OpenFolder => {
-                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                    self.open_project(dir, true);
-                }
+                let mut req = crate::dialogs::Request::new(crate::dialogs::Purpose::OpenFolder);
+                req.dir = self
+                    .project
+                    .as_ref()
+                    .and_then(|p| p.root.parent().map(Path::to_path_buf));
+                crate::dialogs::request(self, req);
             }
             Save => {
                 let i = self.active;
@@ -1032,14 +1037,15 @@ impl App {
             }
             SaveAs => {
                 let i = self.active;
-                if let Some(name) = self.tabs.get(i).and_then(|t| t.doc.file_name()) {
-                    let mut dialog = rfd::FileDialog::new().set_file_name(name);
-                    if let Some(p) = &self.project {
-                        dialog = dialog.set_directory(&p.root);
-                    }
-                    if let Some(path) = dialog.save_file() {
-                        self.save_as(i, &path);
-                    }
+                if let Some((name, id)) = self
+                    .tabs
+                    .get(i)
+                    .and_then(|t| Some((t.doc.file_name()?, t.doc.id())))
+                {
+                    let mut req = crate::dialogs::Request::new(crate::dialogs::Purpose::SaveAs(id));
+                    req.name = Some(name);
+                    req.dir = self.project.as_ref().map(|p| p.root.clone());
+                    crate::dialogs::request(self, req);
                 } else {
                     self.save_tab(i);
                 }
@@ -1757,8 +1763,11 @@ pub(crate) fn to_egui_key(key: codigo_engine::Key) -> Option<Key> {
 }
 
 impl eframe::App for App {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(req) = self.pending_pick.take() {
+            crate::dialogs::start(self, frame, req);
+        }
         self.apply_appearance(&ctx);
         self.updates.tick(&ctx);
         self.poll();

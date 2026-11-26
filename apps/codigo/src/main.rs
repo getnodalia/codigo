@@ -21,6 +21,7 @@ mod blame_ui;
 mod chrome;
 mod conflict_ui;
 mod debug_ui;
+mod dialogs;
 mod editor;
 mod explorer;
 mod file_icons;

@@ -56,6 +56,8 @@ pub enum Overlay {
     Rename(crate::lsp_ui::RenameSetup),
     References(crate::lsp_ui::RefsView),
     Conflicts(crate::conflict_ui::ConflictView),
+    /// A path to type, when no file chooser can open.
+    Path(crate::dialogs::PathPrompt),
 }
 
 impl Overlay {
@@ -281,6 +283,7 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::Rename(s) => crate::lsp_ui::rename_overlay(ctx, app, look, s),
         Overlay::References(v) => crate::lsp_ui::references_overlay(ctx, app, look, v),
         Overlay::Conflicts(v) => crate::conflict_ui::overlay(ctx, app, look, v),
+        Overlay::Path(p) => crate::dialogs::overlay(ctx, app, look, p),
     };
     // A command run from inside an overlay may have opened another one: keep that.
     if matches!(app.overlay, Overlay::None) && !close {

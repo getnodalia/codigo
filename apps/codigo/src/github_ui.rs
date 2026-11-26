@@ -1969,9 +1969,10 @@ pub fn clone_overlay(
         });
     });
     if browse {
-        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-            state.parent = dir.display().to_string();
-        }
+        crate::dialogs::request(
+            app,
+            crate::dialogs::Request::new(crate::dialogs::Purpose::CloneParent),
+        );
     }
     if go {
         state.busy = true;

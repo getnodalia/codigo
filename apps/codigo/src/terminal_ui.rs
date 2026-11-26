@@ -84,7 +84,10 @@ fn start(app: &mut App, ctx: &egui::Context, spec: Spec, title: String, task: bo
         }
         Err(e) => {
             tracing::warn!("terminal: {e}");
-            app.toast(tr("The terminal could not be started."));
+            app.toast(trf(
+                "The terminal could not be started: {}",
+                &[&e.to_string()],
+            ));
         }
     }
 }
