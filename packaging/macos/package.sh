@@ -62,10 +62,11 @@ sign() {
 echo "==> assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$WORK/bin/codigo" "$APP/Contents/MacOS/Codigo"
-# The .icns is made here from the committed 1024 px tile (already on Apple's icon grid) with the
-# system's own sips and iconutil, so no generated binary is committed for it.
+# The .icns is made here from the committed 1024 px tile (assets/icons/codigo-1024.png, already
+# on Apple's icon grid) with the system's own sips and iconutil, so no generated binary is
+# committed for it.
 ICONSET="$WORK/Codigo.iconset"
-TILE="$ROOT/assets/icons/hicolor/1024x1024/apps/$APP_ID.png"
+TILE="$ROOT/assets/icons/codigo-1024.png"
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
   sips -z "$s" "$s" "$TILE" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
