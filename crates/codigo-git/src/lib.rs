@@ -16,12 +16,20 @@
 )]
 
 mod base64;
+mod blame;
+mod hunks;
+mod merge;
 mod run;
+mod stash;
 mod status;
 
 use std::path::{Path, PathBuf};
 
+pub use blame::BlameLine;
+pub use hunks::{parse as parse_diff, FileDiff, Hunk};
+pub use merge::{conflicts, resolve, side_text, Conflict, Side};
 pub use run::Auth;
+pub use stash::Stash;
 pub use status::{Change, Kind, RepoStatus};
 
 /// What can go wrong running git.

@@ -207,3 +207,164 @@ fn a_token_never_appears_in_an_error() {
     let err = run::git(d.path(), &["rev-parse", "--show-toplevel"], &auth).expect_err("not a repo");
     assert!(!err.to_string().contains("ghp_"));
 }
+
+fn committed(repo: &Repo, name: &str, text: &str, message: &str) {
+    write(repo, name, text);
+    repo.stage_all().expect("add");
+    repo.commit(message).expect("commit");
+}
+
+#[test]
+fn stash_sets_changes_aside_and_brings_them_back() {
+    let (_d, repo) = repo();
+    committed(&repo, "a.txt", "one\n", "first");
+    assert!(repo.stashes().expect("list").is_empty());
+    write(&repo, "a.txt", "changed\n");
+    write(&repo, "new.txt", "fresh\n");
+    repo.stash_push("half done").expect("push");
+    assert!(repo.status().expect("status").changes.is_empty());
+    assert!(!repo.root().join("new.txt").exists());
+    let list = repo.stashes().expect("list");
+    assert_eq!(list.len(), 1);
+    assert!(list[0].message.contains("half done"), "{:?}", list[0]);
+    assert!(repo.stash_show(0).expect("show").contains("+changed"));
+
+    repo.stash_apply(0).expect("apply");
+    assert_eq!(repo.status().expect("status").changes.len(), 2);
+    assert_eq!(repo.stashes().expect("list").len(), 1, "apply keeps it");
+    repo.discard(&repo.status().expect("s").changes[0])
+        .expect("discard");
+    repo.stash_drop(0).expect("drop");
+    assert!(repo.stashes().expect("list").is_empty());
+    assert!(repo.stash_pop(0).is_err());
+}
+
+#[test]
+fn blame_names_the_commit_of_every_line() {
+    let (_d, repo) = repo();
+    committed(&repo, "a.txt", "one\ntwo\n", "first");
+    committed(&repo, "a.txt", "one\ntwo\nthree\n", "add three");
+    write(&repo, "a.txt", "one\nTWO\nthree\n");
+    let b = repo.blame("a.txt").expect("blame");
+    assert_eq!(b.len(), 3);
+    assert_eq!(b[0].summary, "first");
+    assert_eq!(b[2].summary, "add three");
+    assert_eq!(b[0].author, "T");
+    assert!(b[1].uncommitted(), "{:?}", b[1]);
+    assert!(!b[0].uncommitted());
+    assert!(repo.blame("missing.txt").is_err());
+    assert!(repo.blame("--help").is_err());
+}
+
+#[test]
+fn one_hunk_at_a_time_can_be_staged_unstaged_and_discarded() {
+    let (_d, repo) = repo();
+    let base: String = (1..=40).map(|i| format!("line {i}\n")).collect();
+    committed(&repo, "f.txt", &base, "base");
+    let edited = base
+        .replace("line 3\n", "line three\n")
+        .replace("line 38\n", "line thirty-eight\n");
+    write(&repo, "f.txt", &edited);
+
+    let diff = repo.hunks("f.txt", false).expect("hunks");
+    assert_eq!(diff.hunks.len(), 2, "{diff:?}");
+    assert_eq!((diff.hunks[0].added(), diff.hunks[0].removed()), (1, 1));
+
+    // Stage only the second hunk.
+    repo.stage_hunk("f.txt", 1).expect("stage hunk");
+    let staged = repo.hunks("f.txt", true).expect("staged");
+    assert_eq!(staged.hunks.len(), 1);
+    assert!(staged.hunks[0]
+        .lines
+        .iter()
+        .any(|l| l == "+line thirty-eight"));
+    let rest = repo.hunks("f.txt", false).expect("rest");
+    assert_eq!(rest.hunks.len(), 1);
+    assert!(rest.hunks[0].lines.iter().any(|l| l == "+line three"));
+
+    // Take it back out.
+    repo.unstage_hunk("f.txt", 0).expect("unstage hunk");
+    assert!(repo.hunks("f.txt", true).expect("staged").hunks.is_empty());
+    assert_eq!(repo.hunks("f.txt", false).expect("all").hunks.len(), 2);
+
+    // Discard the first hunk from the folder.
+    repo.discard_hunk("f.txt", 0).expect("discard hunk");
+    let now = fs::read_to_string(repo.root().join("f.txt")).expect("read");
+    assert!(now.contains("line 3\n") && now.contains("line thirty-eight\n"));
+
+    // A stale index is an error, not a panic.
+    assert!(repo.stage_hunk("f.txt", 9).is_err());
+    assert!(repo.stage_hunk("--help", 0).is_err());
+    assert!(repo
+        .hunks("nope.txt", false)
+        .expect("none")
+        .hunks
+        .is_empty());
+}
+
+#[test]
+fn conflict_blocks_are_found_and_resolved_by_side() {
+    let text = "top\n<<<<<<< HEAD\nours 1\nours 2\n=======\ntheirs\n>>>>>>> feature\nmiddle\n\
+                <<<<<<< HEAD\na\n||||||| base\nb\n=======\nc\n>>>>>>> feature\nend\n";
+    let all = conflicts(text);
+    assert_eq!(all.len(), 2);
+    assert_eq!((all[0].start, all[0].mid, all[0].end), (1, 4, 6));
+    assert_eq!(all[0].ours_label, "HEAD");
+    assert_eq!(all[0].theirs_label, "feature");
+    assert_eq!(all[1].base, Some(10));
+    assert_eq!(side_text(text, &all[0], Side::Theirs), "theirs\n");
+
+    let ours = resolve(text, 0, Side::Ours).expect("ours");
+    assert!(ours.starts_with("top\nours 1\nours 2\nmiddle\n<<<<<<<"));
+    let theirs = resolve(&ours, 0, Side::Theirs).expect("theirs");
+    assert_eq!(theirs, "top\nours 1\nours 2\nmiddle\nc\nend\n");
+    assert!(conflicts(&theirs).is_empty());
+    let both = resolve(text, 1, Side::Both).expect("both");
+    assert!(both.contains("a\nc\nend\n"), "{both}");
+    assert_eq!(resolve(text, 5, Side::Ours), None);
+
+    // Seven characters exactly, and CRLF files keep their endings.
+    assert!(conflicts("<<<<<<<< x\n=======\n>>>>>>>> y\n").is_empty());
+    let crlf = "<<<<<<< HEAD\r\nx\r\n=======\r\ny\r\n>>>>>>> b\r\n";
+    assert_eq!(resolve(crlf, 0, Side::Both).as_deref(), Some("x\r\ny\r\n"));
+    // An unfinished block is not a conflict.
+    assert!(conflicts("<<<<<<< HEAD\nx\n=======\ny\n").is_empty());
+}
+
+#[test]
+fn a_real_merge_conflict_can_be_resolved_and_aborted() {
+    let (_d, repo) = repo();
+    committed(&repo, "a.txt", "base\n", "base");
+    let main = repo.status().expect("s").branch.expect("branch");
+    repo.create_branch("other").expect("branch");
+    committed(&repo, "a.txt", "theirs\n", "other change");
+    repo.checkout(&main).expect("back");
+    committed(&repo, "a.txt", "ours\n", "main change");
+
+    assert!(repo.merge("--bad").is_err());
+    assert!(matches!(repo.merge("other"), Err(Error::Failed(_))));
+    assert!(repo.merging());
+    let s = repo.status().expect("status");
+    let c = s.changes.iter().find(|c| c.path == "a.txt").expect("a");
+    assert_eq!(c.kind(), Kind::Conflicted);
+
+    repo.merge_abort().expect("abort");
+    assert!(!repo.merging());
+    assert_eq!(
+        fs::read_to_string(repo.root().join("a.txt")).expect("r"),
+        "ours\n"
+    );
+
+    // Again, this time resolving by hand.
+    assert!(repo.merge("other").is_err());
+    let text = fs::read_to_string(repo.root().join("a.txt")).expect("r");
+    let fixed = resolve(&text, 0, Side::Theirs).expect("resolve");
+    fs::write(repo.root().join("a.txt"), fixed).expect("w");
+    repo.stage(&["a.txt".into()]).expect("stage");
+    repo.commit("merged").expect("commit");
+    assert!(!repo.merging());
+    assert_eq!(
+        fs::read_to_string(repo.root().join("a.txt")).expect("r"),
+        "theirs\n"
+    );
+}
