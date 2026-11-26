@@ -30,6 +30,8 @@ pub enum Msg {
     Files(PathBuf, Vec<String>),
     Search(u64, Result<SearchResult, String>),
     Git(PathBuf, Option<GitInfo>),
+    /// A file's changed lines against git, for the gutter.
+    Marks(PathBuf, Vec<ws::LineChange>),
     Quality(u64, codigo_quality::Report),
 }
 
@@ -392,10 +394,12 @@ impl App {
             let id = self.new_id();
             match Document::open(id, &path) {
                 Ok(doc) => {
-                    let mut view = editor::View::new();
-                    view.marks = ws::line_changes(&path);
-                    self.tabs.push(Tab { doc, view });
+                    self.tabs.push(Tab {
+                        doc,
+                        view: editor::View::new(),
+                    });
                     self.active = self.tabs.len() - 1;
+                    self.load_marks(path.clone());
                 }
                 Err(e) => {
                     let name = path
@@ -469,9 +473,10 @@ impl App {
         tab.doc.tidy(trim, newline);
         match tab.doc.save() {
             Ok(()) => {
-                tab.view.marks = tab.doc.path().map(ws::line_changes).unwrap_or_default();
-                if let Some(p) = tab.doc.path() {
+                let saved = tab.doc.path().map(Path::to_path_buf);
+                if let Some(p) = &saved {
                     self.lsp.saved(p);
+                    self.load_marks(p.clone());
                 }
                 self.refresh_git();
                 true
@@ -503,7 +508,7 @@ impl App {
                 if let Some(old) = old.filter(|o| o != path) {
                     self.lsp.closed(&old);
                 }
-                tab.view.marks = ws::line_changes(path);
+                self.load_marks(path.to_path_buf());
                 self.session_dirty = true;
                 self.refresh_git();
                 true
@@ -628,6 +633,17 @@ impl App {
         });
     }
 
+    /// Read a file's changed lines from git on a worker thread: `git diff` on a big repository
+    /// takes long enough to be felt, so the window never waits for it.
+    pub fn load_marks(&self, path: PathBuf) {
+        let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+        std::thread::spawn(move || {
+            let marks = ws::line_changes(&path);
+            let _ = tx.send(Msg::Marks(path, marks));
+            ctx.request_repaint();
+        });
+    }
+
     pub fn list_files(&mut self) {
         let Some(root) = self.project.as_ref().map(|p| p.root.clone()) else {
             return;
@@ -725,6 +741,13 @@ impl App {
                 Msg::Files(root, files) => {
                     if self.project.as_ref().is_some_and(|p| p.root == root) {
                         self.files = Some((root, Arc::new(files)));
+                    }
+                }
+                Msg::Marks(path, marks) => {
+                    for tab in &mut self.tabs {
+                        if tab.doc.path() == Some(path.as_path()) {
+                            tab.view.marks = marks.clone();
+                        }
                     }
                 }
                 Msg::Git(root, info) => {
@@ -1254,15 +1277,19 @@ impl App {
         }
         self.last_disk_check = Instant::now();
         let mut toasts = Vec::new();
+        let mut reloaded = None;
         if let Some(tab) = self.tabs.get_mut(self.active) {
             if !tab.doc.conflict && tab.doc.changed_on_disk() {
                 if tab.doc.is_dirty() {
                     tab.doc.conflict = true;
                 } else if tab.doc.reload().is_ok() {
-                    tab.view.marks = tab.doc.path().map(ws::line_changes).unwrap_or_default();
+                    reloaded = tab.doc.path().map(Path::to_path_buf);
                     toasts.push(tr("The file changed on disk and was reloaded."));
                 }
             }
+        }
+        if let Some(path) = reloaded {
+            self.load_marks(path);
         }
         for t in toasts {
             self.toast(t);
