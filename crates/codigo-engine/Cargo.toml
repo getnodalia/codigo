@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 codigo-text.workspace = true
 codigo-syntax.workspace = true
+codigo-lsp.workspace = true
 codigo-workspace.workspace = true
 ropey.workspace = true
 serde.workspace = true

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use codigo_engine::{
-    Appearance, AutoSave, Cmd, DocId, Document, OpenError, SaveError, SessionState, Settings,
+    Appearance, AutoSave, Cmd, DocId, Document, Hub, OpenError, SaveError, SessionState, Settings,
 };
 use codigo_text::{Query, Selection};
 use codigo_workspace::{self as ws, GitInfo, SearchOptions, SearchResult};
@@ -116,6 +116,8 @@ pub struct App {
     pub active: usize,
     next_id: u64,
     pub project: Option<Project>,
+    /// Language servers and what they reported.
+    pub lsp: Hub,
     pub panel: Panel,
     pub sidebar_visible: bool,
     pub sidebar_width: f32,
@@ -155,12 +157,17 @@ impl App {
         let settings = Settings::load();
         i18n::set(Lang::from_setting(&settings.language));
         let (tx, rx) = channel();
+        let lsp = {
+            let ctx = cc.egui_ctx.clone();
+            Hub::new(settings.language_servers, move || ctx.request_repaint())
+        };
         let mut app = App {
             settings,
             tabs: Vec::new(),
             active: 0,
             next_id: 1,
             project: None,
+            lsp,
             panel: Panel::Explorer,
             sidebar_visible: true,
             sidebar_width: 280.0,
@@ -427,6 +434,9 @@ impl App {
         match tab.doc.save() {
             Ok(()) => {
                 tab.view.marks = tab.doc.path().map(ws::line_changes).unwrap_or_default();
+                if let Some(p) = tab.doc.path() {
+                    self.lsp.saved(p);
+                }
                 self.refresh_git();
                 true
             }
@@ -451,8 +461,12 @@ impl App {
             return false;
         };
         tab.doc.tidy(trim, newline);
+        let old = tab.doc.path().map(Path::to_path_buf);
         match tab.doc.save_as(path) {
             Ok(()) => {
+                if let Some(old) = old.filter(|o| o != path) {
+                    self.lsp.closed(&old);
+                }
                 tab.view.marks = ws::line_changes(path);
                 self.session_dirty = true;
                 self.refresh_git();
@@ -485,6 +499,7 @@ impl App {
         }
         let tab = self.tabs.remove(index);
         if let Some(p) = tab.doc.path() {
+            self.lsp.closed(p);
             self.closed.push(p.to_path_buf());
             self.closed.truncate(20);
         }
@@ -604,6 +619,28 @@ impl App {
             let _ = tx.send(Msg::Search(serial, result));
             ctx.request_repaint();
         });
+    }
+
+    /// Keep the language servers in step with the open files and read what they reported.
+    fn sync_language_servers(&mut self) {
+        self.lsp.set_enabled(self.settings.language_servers);
+        self.lsp
+            .set_root(self.project.as_ref().map(|p| p.root.clone()));
+        for tab in &self.tabs {
+            self.lsp.sync(&tab.doc);
+        }
+        self.lsp.poll();
+        let generation = self.lsp.generation();
+        for tab in &mut self.tabs {
+            let key = (generation, tab.doc.buffer().revision());
+            if tab.view.diagnostics_key != Some(key) {
+                tab.view.diagnostics = self.lsp.marks(&tab.doc);
+                tab.view.diagnostics_key = Some(key);
+            }
+        }
+        if self.lsp.has_pending_changes() {
+            self.ctx.request_repaint_after(Hub::sync_interval());
+        }
     }
 
     fn poll(&mut self) {
@@ -1269,6 +1306,7 @@ impl eframe::App for App {
         self.apply_appearance(&ctx);
         self.updates.tick(&ctx);
         self.poll();
+        self.sync_language_servers();
         self.external_changes();
 
         let decorated = !self.ndl_controls();

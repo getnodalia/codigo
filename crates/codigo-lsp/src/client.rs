@@ -19,6 +19,9 @@ use serde_json::{json, Value};
 use crate::diagnostics::{parse_list, Diagnostic};
 use crate::framing::{read_message, write_message, FrameError};
 
+/// Called from the reader thread after the server sent something.
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
+
 type Responses = HashMap<i64, Sender<Result<Value, ResponseError>>>;
 
 /// A server's error reply, or the connection ending before it answered.
@@ -108,13 +111,23 @@ impl Client {
         R: Read + Send + 'static,
         W: Write + Send + 'static,
     {
+        Client::with_waker(reader, writer, None)
+    }
+
+    /// Like [`Client::new`]; `waker` is called from the reader thread whenever the server said
+    /// something, so a window can repaint instead of polling on a timer.
+    pub fn with_waker<R, W>(reader: R, writer: W, waker: Option<Waker>) -> Client
+    where
+        R: Read + Send + 'static,
+        W: Write + Send + 'static,
+    {
         let writer: SharedWriter = Arc::new(Mutex::new(Box::new(writer)));
         let pending: Arc<Mutex<Responses>> = Arc::new(Mutex::new(HashMap::new()));
         let (tx, events) = mpsc::sync_channel(4096);
         let (w, p) = (writer.clone(), pending.clone());
         let spawned = std::thread::Builder::new()
             .name("codigo-lsp-reader".into())
-            .spawn(move || read_loop(BufReader::new(reader), w, p, tx));
+            .spawn(move || read_loop(BufReader::new(reader), w, p, tx, waker));
         if let Err(e) = spawned {
             tracing::warn!("could not start the language server reader: {e}");
         }
@@ -243,10 +256,19 @@ fn read_loop<R: Read>(
     writer: SharedWriter,
     pending: Arc<Mutex<Responses>>,
     events: SyncSender<Event>,
+    waker: Option<Waker>,
 ) {
+    let wake = || {
+        if let Some(w) = &waker {
+            w();
+        }
+    };
     loop {
         match read_message(&mut reader) {
-            Ok(Some(message)) => dispatch(message, &writer, &pending, &events),
+            Ok(Some(message)) => {
+                dispatch(message, &writer, &pending, &events);
+                wake();
+            }
             Ok(None) => tracing::debug!("skipped a message that was not JSON"),
             Err(FrameError::Closed) => break,
             Err(e) => {
@@ -259,6 +281,7 @@ fn read_loop<R: Read>(
         let _ = tx.send(Err(closed()));
     }
     let _ = events.send(Event::Exited);
+    wake();
 }
 
 fn dispatch(

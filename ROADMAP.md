@@ -7,14 +7,15 @@ file lists what exists and what does not. Nothing under "Next" is available yet.
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
 1. **Language servers (LSP).** Diagnostics, hover, completion, go to definition, references, rename
    and formatting, with servers started per language from the user's PATH or settings. The
-   `codigo-lsp` crate (protocol client, off-thread transport, server registry) exists; it is not
-   wired into the editor yet, so nothing in the interface uses it.
+   `codigo-lsp` crate (protocol client, off-thread transport, server registry) and the engine's
+   `Hub` run: diagnostics show as underlines, tooltips and status bar counts. Hover, completion,
+   go to definition, references, rename and formatting are still to do.
 2. **Integrated terminal.** A pty-backed terminal panel (`codigo-term`) with tabs and the project
    folder as its working directory.
 3. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`

@@ -9,7 +9,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
-use crate::client::Client;
+use crate::client::{Client, Waker};
 
 #[derive(Debug)]
 pub struct ServerSpec {
@@ -184,11 +184,20 @@ pub enum SpawnError {
 
 /// Start `spec` with `cwd` as its working directory and connect a client to it.
 pub fn spawn(spec: &ServerSpec, cwd: &Path) -> Result<Spawned, SpawnError> {
+    spawn_with(spec, cwd, None)
+}
+
+/// [`spawn`], with a `waker` called whenever the server says something.
+pub fn spawn_with(
+    spec: &ServerSpec,
+    cwd: &Path,
+    waker: Option<Waker>,
+) -> Result<Spawned, SpawnError> {
     let program = find_executable(spec.command).ok_or_else(|| SpawnError::NotFound {
         command: spec.command.to_owned(),
         install: spec.install,
     })?;
-    spawn_program(&program, spec.args, cwd, spec.command)
+    spawn_program(&program, spec.args, cwd, spec.command, waker)
 }
 
 fn spawn_program(
@@ -196,6 +205,7 @@ fn spawn_program(
     args: &[&str],
     cwd: &Path,
     name: &str,
+    waker: Option<Waker>,
 ) -> Result<Spawned, SpawnError> {
     let start_err = |source| SpawnError::Start {
         command: name.to_owned(),
@@ -231,7 +241,7 @@ fn spawn_program(
             });
     }
     Ok(Spawned {
-        client: Client::new(stdout, stdin),
+        client: Client::with_waker(stdout, stdin, waker),
         child,
     })
 }
@@ -279,8 +289,14 @@ mod tests {
     #[cfg(unix)]
     fn a_program_that_exits_is_reported_as_exited() {
         let d = tempfile::tempdir().expect("tmp");
-        let mut s =
-            spawn_program(Path::new("/bin/sh"), &["-c", "exit 0"], d.path(), "sh").expect("spawn");
+        let mut s = spawn_program(
+            Path::new("/bin/sh"),
+            &["-c", "exit 0"],
+            d.path(),
+            "sh",
+            None,
+        )
+        .expect("spawn");
         let mut tries = 0;
         while !s.exited() && tries < 200 {
             std::thread::sleep(std::time::Duration::from_millis(10));

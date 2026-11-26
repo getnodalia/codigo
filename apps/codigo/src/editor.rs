@@ -6,7 +6,7 @@
 //! does. The one thing that is not lazy is word wrap, which needs every line's height up front;
 //! past [`WRAP_LINE_LIMIT`] lines it is switched off rather than made slow.
 
-use codigo_engine::{Cmd, Document};
+use codigo_engine::{Cmd, Document, Mark, Severity};
 use codigo_syntax::Span;
 use codigo_text::search::Matcher;
 use codigo_text::{Buffer, IndentRules, Motion, Pairs};
@@ -52,6 +52,10 @@ pub struct View {
     last_state: (u64, usize),
     /// Where the caret was last drawn, for the status bar and popups.
     pub caret_rect: Option<Rect>,
+    /// What the language server reported, sorted by line, for squiggles and tooltips.
+    pub diagnostics: Vec<Mark>,
+    /// The hub generation and document revision `diagnostics` was built for.
+    pub diagnostics_key: Option<(u64, u64)>,
 }
 
 impl View {
@@ -337,6 +341,8 @@ pub fn show(
                 ui, doc, view, &response, &m, text_x, origin.y, wrap_cols, opts, &mut out,
             );
 
+            diagnostic_tooltip(doc, view, &response, &m, text_x, origin.y, wrap_cols, look);
+
             // Which rows are on screen.
             let lines = doc.buffer().line_count();
             let first_row = (viewport.min.y / m.row_h).floor().max(0.0) as usize;
@@ -491,6 +497,26 @@ pub fn show(
                         y,
                         base_cell,
                     );
+                    // Diagnostics.
+                    let first = view.diagnostics.partition_point(|d| d.line < line);
+                    for d in view
+                        .diagnostics
+                        .get(first..)
+                        .unwrap_or_default()
+                        .iter()
+                        .take_while(|d| d.line == line)
+                    {
+                        let (sa, sb) = (d.start.max(a), d.end.min(b));
+                        if sa < sb {
+                            squiggle(
+                                &painter,
+                                x_of(sa),
+                                x_of(sb),
+                                y + m.row_h - 3.0,
+                                severity_ink(look, d.severity),
+                            );
+                        }
+                    }
                     // Carets.
                     for (_, _, head) in &selections {
                         if *head < line_start || *head > line_start + chars {
@@ -606,6 +632,78 @@ pub fn show(
     }
     view.last_state = after;
     out
+}
+
+/// What the language server said about the text under the pointer.
+#[allow(clippy::too_many_arguments)]
+fn diagnostic_tooltip(
+    doc: &Document,
+    view: &View,
+    response: &egui::Response,
+    m: &Metrics,
+    text_x: f32,
+    origin_y: f32,
+    wrap_cols: usize,
+    look: &Look,
+) {
+    if view.diagnostics.is_empty() || !response.hovered() {
+        return;
+    }
+    let Some(pos) = response.hover_pos().filter(|p| p.x >= text_x) else {
+        return;
+    };
+    let idx = char_at_point(doc, view, m, text_x, origin_y, wrap_cols, pos);
+    let (line, col) = doc.buffer().line_col(idx);
+    let hits: Vec<&Mark> = view
+        .diagnostics
+        .iter()
+        .filter(|d| d.line == line && col >= d.start && col < d.end)
+        .take(5)
+        .collect();
+    if hits.is_empty() {
+        return;
+    }
+    response.clone().on_hover_ui_at_pointer(|ui| {
+        ui.set_max_width(460.0);
+        for d in hits {
+            ui.horizontal_wrapped(|ui| {
+                ui.colored_label(severity_ink(look, d.severity), "●");
+                ui.label(&d.message);
+            });
+            if let Some(source) = &d.source {
+                ui.label(
+                    egui::RichText::new(source)
+                        .small()
+                        .color(color(look.palette.text_tertiary)),
+                );
+            }
+        }
+    });
+}
+
+fn severity_ink(look: &Look, severity: Severity) -> Color32 {
+    let p = &look.palette;
+    match severity {
+        Severity::Error => color(p.status_danger_fg),
+        Severity::Warning => color(p.status_warning_fg),
+        Severity::Information => color(p.status_info_fg),
+        Severity::Hint => color(p.text_tertiary),
+    }
+}
+
+/// A wavy underline from `x0` to `x1` at height `y`.
+fn squiggle(painter: &egui::Painter, x0: f32, x1: f32, y: f32, ink: Color32) {
+    const STEP: f32 = 3.0;
+    let mut points = Vec::new();
+    let mut x = x0;
+    let mut up = false;
+    while x < x1 && points.len() < 4_000 {
+        points.push(pos2(x, if up { y - 1.5 } else { y }));
+        up = !up;
+        x += STEP;
+    }
+    points.push(pos2(x1, if up { y - 1.5 } else { y }));
+    painter.add(egui::Shape::line(points, Stroke::new(1.2, ink)));
 }
 
 #[allow(clippy::too_many_arguments)]
