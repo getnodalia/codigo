@@ -37,6 +37,7 @@ pub struct Options {
     pub highlight_line: bool,
     pub whitespace: bool,
     pub auto_close_pairs: bool,
+    pub minimap: bool,
 }
 
 /// Per-tab view state that is not part of the document.
@@ -63,6 +64,15 @@ pub struct View {
     pub diagnostics: Vec<Mark>,
     /// The hub generation and document revision `diagnostics` was built for.
     pub diagnostics_key: Option<(u64, u64)>,
+    /// 0 for the editor's own view of a file, 1 for the second view of the same file in a split.
+    pub pane: u8,
+    /// How far the text is scrolled, in points, as of the last frame.
+    scroll_y: f32,
+    /// Scroll here on the next frame (the minimap was clicked).
+    set_scroll: Option<f32>,
+    /// Row height and the height of the text area, from the last frame, for the minimap.
+    row_h: f32,
+    viewport_h: f32,
 }
 
 impl View {
@@ -321,6 +331,12 @@ fn byte_of_chars(text: &str) -> Vec<usize> {
     out
 }
 
+/// The id of the text widget showing `doc` in `pane`, to ask whether it has the keyboard.
+pub fn editor_id(doc: u64, pane: u8) -> Id {
+    Id::unique(("codigo-editor", doc, pane))
+}
+
+/// The editor, with the minimap beside it when it is on.
 #[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
@@ -332,8 +348,176 @@ pub fn show(
     focus: bool,
     now: f64,
 ) -> Output {
+    let full = ui.available_rect_before_wrap();
+    if !opts.minimap || full.width() < MINIMAP_MIN_AREA {
+        return show_text(ui, doc, view, opts, look, matcher, focus, now);
+    }
+    let strip = Rect::from_min_max(pos2(full.right() - MINIMAP_W, full.top()), full.max);
+    let text = Rect::from_min_max(full.min, pos2(strip.left(), full.bottom()));
+    let out = ui
+        .scope_builder(egui::UiBuilder::new().max_rect(text), |ui| {
+            show_text(ui, doc, view, opts, look, matcher, focus, now)
+        })
+        .inner;
+    minimap(ui, doc, view, strip, look);
+    out
+}
+
+/// Width of the minimap strip, and how wide the editor must be to afford one.
+const MINIMAP_W: f32 = 92.0;
+const MINIMAP_MIN_AREA: f32 = 480.0;
+
+/// A scaled-down picture of the whole file: one thin bar per run of text, the part on screen
+/// lit, and ticks for problems and changes. Click or drag to scroll.
+fn minimap(ui: &mut Ui, doc: &Document, view: &mut View, strip: Rect, look: &Look) {
+    let p = look.palette;
+    let painter = ui.painter_at(strip);
+    painter.rect_filled(strip, 0.0, color(p.surface_window));
+    painter.line_segment(
+        [strip.left_top(), strip.left_bottom()],
+        Stroke::new(1.0, color(p.border_subtle)),
+    );
+    let buffer = doc.buffer();
+    let lines = buffer.line_count().max(1);
+    let h = strip.height();
+    if h < 8.0 || view.row_h <= 0.0 {
+        return;
+    }
+    // Points per line: two when the file is short enough, less when it has to fit.
+    let scale = (h / lines as f32).min(2.0);
+    let step = scale.max(1.0);
+    let bars = ((lines as f32 * scale) / step).ceil() as usize;
+    let ink = color(p.text_secondary).gamma_multiply(0.45);
+    let x0 = strip.left() + 6.0;
+    let col_w = 0.8_f32;
+    let max_cols = ((strip.width() - 18.0) / col_w) as usize;
+    let thick = (step - 0.4).clamp(1.0, 1.6);
+    let rope = buffer.rope();
+    for i in 0..bars {
+        let line = ((i as f32 * step) / scale) as usize;
+        let Some(text) = rope.get_line(line) else {
+            break;
+        };
+        let y = strip.top() + i as f32 * step;
+        if y > strip.bottom() {
+            break;
+        }
+        let (mut col, mut run_start): (usize, Option<usize>) = (0, None);
+        for ch in text.chars().take(max_cols * 2) {
+            if col >= max_cols {
+                break;
+            }
+            let blank = ch.is_whitespace();
+            match (blank, run_start) {
+                (false, None) => run_start = Some(col),
+                (true, Some(a)) => {
+                    painter.rect_filled(
+                        Rect::from_min_size(
+                            pos2(x0 + a as f32 * col_w, y),
+                            vec2((col - a) as f32 * col_w, thick),
+                        ),
+                        0.0,
+                        ink,
+                    );
+                    run_start = None;
+                }
+                _ => {}
+            }
+            col += if ch == '\t' { 4 } else { 1 };
+        }
+        if let Some(a) = run_start {
+            painter.rect_filled(
+                Rect::from_min_size(
+                    pos2(x0 + a as f32 * col_w, y),
+                    vec2((col.min(max_cols) - a) as f32 * col_w, thick),
+                ),
+                0.0,
+                ink,
+            );
+        }
+    }
+    let y_of = |line: usize| strip.top() + line as f32 * scale;
+    // Where the file differs from git, and what the language server complains about.
+    for change in &view.marks {
+        let fg = match change.kind {
+            LineChangeKind::Added => p.status_success_fg,
+            LineChangeKind::Modified => p.status_info_fg,
+            LineChangeKind::Removed => p.status_danger_fg,
+        };
+        let top = y_of(change.line);
+        let bottom = y_of(change.line + change.count.max(1)).max(top + 2.0);
+        painter.rect_filled(
+            Rect::from_min_max(
+                pos2(strip.left() + 1.0, top),
+                pos2(strip.left() + 4.0, bottom),
+            ),
+            0.0,
+            color(fg),
+        );
+    }
+    for d in &view.diagnostics {
+        if d.severity == Severity::Hint {
+            continue;
+        }
+        let top = y_of(d.line);
+        painter.rect_filled(
+            Rect::from_min_max(
+                pos2(strip.right() - 5.0, top),
+                pos2(strip.right() - 1.0, top + 2.5),
+            ),
+            0.0,
+            severity_ink(look, d.severity),
+        );
+    }
+    // The part of the file on screen.
+    let rows = total_rows(&view.cache, lines);
+    let first_row = (view.scroll_y / view.row_h).max(0.0) as usize;
+    let last_row = (((view.scroll_y + view.viewport_h) / view.row_h).ceil() as usize).min(rows);
+    let top_line = line_of_row(&view.cache, lines, first_row);
+    let bottom_line = line_of_row(&view.cache, lines, last_row).max(top_line + 1);
+    let lit = Rect::from_min_max(
+        pos2(strip.left() + 1.0, y_of(top_line)),
+        pos2(strip.right(), y_of(bottom_line).min(strip.bottom())),
+    );
+    painter.rect_filled(lit, 0.0, color(p.text_primary).gamma_multiply(0.08));
+    painter.rect_stroke(
+        lit,
+        0.0,
+        Stroke::new(1.0, color(p.text_primary).gamma_multiply(0.18)),
+        egui::StrokeKind::Inside,
+    );
+    // Click or drag to scroll: the point under the pointer becomes the middle of the screen.
+    let response = ui.interact(
+        strip,
+        Id::unique(("codigo-minimap", doc.id().0, view.pane)),
+        Sense::click_and_drag(),
+    );
+    if response.clicked() || response.dragged() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            let line = (((pos.y - strip.top()) / scale).max(0.0) as usize).min(lines - 1);
+            let row = first_row_of(&view.cache, line) as f32;
+            view.set_scroll = Some((row * view.row_h - view.viewport_h / 2.0).max(0.0));
+            ui.ctx().request_repaint();
+        }
+    }
+    if response.hovered() || response.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn show_text(
+    ui: &mut Ui,
+    doc: &mut Document,
+    view: &mut View,
+    opts: &Options,
+    look: &Look,
+    matcher: Option<&Matcher>,
+    focus: bool,
+    now: f64,
+) -> Output {
     let mut out = Output::default();
-    let id = Id::unique(("codigo-editor", doc.id().0));
+    let id = editor_id(doc.id().0, view.pane);
     let p = look.palette;
     if focus {
         ui.memory_mut(|m| m.request_focus(id));
@@ -410,8 +594,15 @@ pub fn show(
     let viewport_h = ui.available_height();
     let content_h = rows_total as f32 * m.row_h + (viewport_h - m.row_h * 3.0).max(0.0);
     let reveal = std::mem::take(&mut view.reveal);
+    view.row_h = m.row_h;
+    view.viewport_h = viewport_h;
+    let area = match view.set_scroll.take() {
+        Some(y) => area.vertical_scroll_offset(y),
+        None => area,
+    };
 
-    area.id_salt(("codigo-scroll", doc.id().0))
+    let scrolled = area
+        .id_salt(("codigo-scroll", doc.id().0, view.pane))
         .auto_shrink([false, false])
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
         .show_viewport(ui, |ui, viewport| {
@@ -742,6 +933,7 @@ pub fn show(
                     .request_repaint_after(std::time::Duration::from_millis(550));
             }
         });
+    view.scroll_y = scrolled.state.clamped_offset().y;
 
     let after = (doc.buffer().revision(), doc.buffer().primary().head);
     if after != before || after != view.last_state {

@@ -20,6 +20,7 @@ pub mod lsp;
 pub mod paths;
 pub mod session;
 pub mod settings;
+pub mod snippets;
 pub mod tasks;
 
 pub use codigo_lsp::CompletionItem;
@@ -27,8 +28,8 @@ pub use codigo_lsp::Severity;
 pub use command::{Category, Cmd, Key, Shortcut};
 pub use document::{detect_indent, DocId, Document, OpenError, SaveError};
 pub use lsp::{
-    char_in_line, Answer, Counts, Hub, Mark, Place, Problem, Query, QueryError, QueryKind,
-    ServerState, ServerStatus, MAX_PROBLEMS,
+    char_in_line, edits_for, Answer, Counts, FileChange, Hub, Mark, Place, PlaceEdit, Problem,
+    Query, QueryError, QueryKind, ServerState, ServerStatus, MAX_PROBLEMS,
 };
 pub use session::SessionState;
 pub use settings::{Appearance, AutoSave, Settings};

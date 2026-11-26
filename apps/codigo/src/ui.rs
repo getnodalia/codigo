@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use codigo_engine::Cmd;
+use codigo_engine::{Cmd, DocId};
 use codigo_text::LineEnding;
 use codigo_workspace::{GitInfo, Status};
 use egui::{
@@ -13,6 +13,7 @@ use egui::{
     RichText, ScrollArea, Sense, Stroke, Ui, UiBuilder,
 };
 use nodalia_theme::creator::{self as cr, layout, Look};
+use nodalia_theme::engineering as eng;
 use nodalia_theme::for_egui::color;
 use nodalia_theme::{font_size, Mode};
 
@@ -219,13 +220,20 @@ fn apply(ctx: &egui::Context, app: &mut App, act: Act) {
     }
 }
 
+/// The engineering suite's colours for the same palette.
+pub fn eng_look(look: &Look) -> eng::Look {
+    eng::Look::new(look.palette)
+}
+
 pub fn island(ui: &mut Ui, look: &Look, rect: Rect, id: &str, add: impl FnOnce(&mut Ui)) {
     ui.scope_builder(UiBuilder::new().max_rect(rect).id_salt(id), |ui| {
-        cr::island(look).show(ui, |ui| {
-            ui.set_min_size(rect.size());
-            ui.set_max_size(rect.size());
-            add(ui);
-        });
+        eng::island(&eng_look(look))
+            .inner_margin(Margin::ZERO)
+            .show(ui, |ui| {
+                ui.set_min_size(rect.size());
+                ui.set_max_size(rect.size());
+                add(ui);
+            });
     });
 }
 
@@ -476,18 +484,18 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         });
     });
     if app.panel != Panel::Explorer {
-        ui.label(
-            RichText::new(match app.panel {
+        eng::panel_header(
+            ui,
+            &eng_look(look),
+            match app.panel {
                 Panel::Explorer | Panel::Search => tr("Search"),
                 Panel::Quality => tr("Quality"),
                 Panel::Problems => tr("Problems"),
                 Panel::Debug => tr("Debug"),
                 Panel::Git => tr("Source control"),
                 Panel::GitHub => tr("GitHub"),
-            })
-            .strong()
-            .size(font_size::SMALL)
-            .color(color(look.palette.text_secondary)),
+            },
+            |_| {},
         );
     }
     ui.add_space(4.0);
@@ -887,45 +895,147 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     let opts = app.editor_options();
     let now = ui.ctx().input(|i| i.time);
     let rect = ui.available_rect_before_wrap();
-    let active = app.active;
-    let output = {
-        let App {
-            tabs, find, debug, ..
-        } = app;
-        let matcher = if find.open {
-            find.matcher.as_ref()
-        } else {
-            None
-        };
-        let Some(tab) = tabs.get_mut(active) else {
-            return;
-        };
-        match tab.doc.path() {
-            Some(path) => {
-                tab.view.breakpoints = debug.lines_of(path);
-                tab.view.exec_line = debug.exec_line(path);
-            }
-            None => {
-                tab.view.breakpoints.clear();
-                tab.view.exec_line = None;
-            }
-        }
-        ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
-            editor::show(
-                ui,
-                &mut tab.doc,
-                &mut tab.view,
-                &opts,
-                look,
-                matcher,
-                focus,
-                now,
-            )
-        })
-        .inner
-    };
     let ctx = ui.ctx().clone();
-    app.editor_output(&ctx, output);
+
+    // The side that has the keyboard follows the active tab; a file that was closed is replaced.
+    let ids: Vec<DocId> = app.tabs.iter().map(|t| t.doc.id()).collect();
+    let active_id = app.tabs.get(app.active).map(|t| t.doc.id());
+    if let (Some(split), Some(active_id)) = (app.split.as_mut(), active_id) {
+        let (own, other) = if split.right_focused {
+            (&mut split.right, &mut split.left)
+        } else {
+            (&mut split.left, &mut split.right)
+        };
+        *own = active_id;
+        if !ids.contains(other) {
+            *other = active_id;
+        }
+    }
+
+    let Some(split) = app
+        .split
+        .as_ref()
+        .map(|s| (s.left, s.right, s.right_focused))
+    else {
+        let output = draw_pane(ui, app, rect, app.active, false, &opts, look, focus, now);
+        if let Some(output) = output {
+            app.editor_output(&ctx, output);
+        }
+        return;
+    };
+    let (left_id, right_id, right_focused) = split;
+    let half = ((rect.width() - 1.0) / 2.0).floor();
+    let left_rect = Rect::from_min_size(rect.min, vec2(half, rect.height()));
+    let right_rect = Rect::from_min_max(pos2(rect.right() - half, rect.top()), rect.max);
+    ui.painter().line_segment(
+        [
+            pos2(left_rect.right() + 0.5, rect.top()),
+            pos2(left_rect.right() + 0.5, rect.bottom()),
+        ],
+        Stroke::new(1.0, color(look.palette.border_default)),
+    );
+    let index_of = |id: DocId| ids.iter().position(|d| *d == id).unwrap_or(app.active);
+    let (left_index, right_index) = (index_of(left_id), index_of(right_id));
+    let twin = left_id == right_id;
+    let left_out = draw_pane(
+        ui,
+        app,
+        left_rect,
+        left_index,
+        false,
+        &opts,
+        look,
+        focus && !right_focused,
+        now,
+    );
+    let right_out = draw_pane(
+        ui,
+        app,
+        right_rect,
+        right_index,
+        twin,
+        &opts,
+        look,
+        focus && right_focused,
+        now,
+    );
+    // A click in the other side gives it the keyboard and makes its file the active one.
+    let (mine, theirs) = if right_focused {
+        (right_out, left_out)
+    } else {
+        (left_out, right_out)
+    };
+    if let Some(theirs) = theirs.filter(|o| o.clicked) {
+        let target = if right_focused {
+            left_index
+        } else {
+            right_index
+        };
+        if let Some(split) = app.split.as_mut() {
+            split.right_focused = !right_focused;
+        }
+        app.active = target;
+        app.focus_editor = true;
+        app.session_dirty = true;
+        app.editor_output(&ctx, theirs);
+    } else if let Some(mine) = mine {
+        app.editor_output(&ctx, mine);
+    }
+}
+
+/// One editor pane showing the tab at `index`. `twin` draws the split's own second view of a
+/// file that the other pane shows too.
+#[allow(clippy::too_many_arguments)]
+fn draw_pane(
+    ui: &mut Ui,
+    app: &mut App,
+    rect: Rect,
+    index: usize,
+    twin: bool,
+    opts: &editor::Options,
+    look: &Look,
+    focus: bool,
+    now: f64,
+) -> Option<editor::Output> {
+    let App {
+        tabs,
+        find,
+        debug,
+        split,
+        ..
+    } = app;
+    let matcher = if find.open {
+        find.matcher.as_ref()
+    } else {
+        None
+    };
+    let tab = tabs.get_mut(index)?;
+    match tab.doc.path() {
+        Some(path) => {
+            tab.view.breakpoints = debug.lines_of(path);
+            tab.view.exec_line = debug.exec_line(path);
+        }
+        None => {
+            tab.view.breakpoints.clear();
+            tab.view.exec_line = None;
+        }
+    }
+    let view = match (twin, split.as_mut()) {
+        (true, Some(split)) => {
+            split.twin.breakpoints = tab.view.breakpoints.clone();
+            split.twin.exec_line = tab.view.exec_line;
+            split.twin.marks = tab.view.marks.clone();
+            split.twin.diagnostics = tab.view.diagnostics.clone();
+            &mut split.twin
+        }
+        _ => &mut tab.view,
+    };
+    Some(
+        ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+            editor::show(ui, &mut tab.doc, view, opts, look, matcher, focus, now)
+        })
+        .inner,
+    )
 }
 
 fn banner(ui: &mut Ui, look: &Look, text: &str, add: impl FnOnce(&mut Ui)) {
@@ -1339,7 +1449,16 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
         |ui| {
             ui.spacing_mut().item_spacing.x = 14.0;
             ui.add_space(6.0);
-            let small = |text: String| RichText::new(text).size(font_size::SMALL).color(ink);
+            let small = |text: String| RichText::new(text).font(eng::caption()).color(ink);
+            // Numbers and positions are set in the suite's mono face so columns line up.
+            let value = |text: String| {
+                RichText::new(text)
+                    .font(FontId::new(
+                        eng::size::CAPTION + 0.5,
+                        egui::FontFamily::Monospace,
+                    ))
+                    .color(color(p.text_primary))
+            };
             if let Some(git) = app.project.as_ref().and_then(|p| p.git.as_ref()) {
                 icon(ui, "branch", 13.0, ink);
                 let branch = git
@@ -1422,8 +1541,8 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
                 if language.clicked() {
                     acts.push(Act::Run(Cmd::ChangeLanguage));
                 }
-                ui.label(small("UTF-8".to_owned()));
-                ui.label(small(
+                ui.label(value("UTF-8".to_owned()));
+                ui.label(value(
                     match doc.line_ending() {
                         LineEnding::Lf => "LF",
                         LineEnding::CrLf => "CRLF",
@@ -1438,7 +1557,7 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
                 let (line, col) = b.line_col(b.primary().head);
                 let position = ui
                     .add(
-                        egui::Label::new(small(trf(
+                        egui::Label::new(value(trf(
                             "Line {}, column {}",
                             &[&(line + 1).to_string(), &(col + 1).to_string()],
                         )))

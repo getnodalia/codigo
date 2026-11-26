@@ -16,7 +16,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.91"
 license = "MIT OR Apache-2.0"
@@ -54,7 +54,7 @@ streaming-iterator = "0.1"
 
 eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "system_fonts", "wayland", "x11"] }
 egui = "0.37"
-nodalia-theme = { git = "https://github.com/getnodalia/nodalia-design", rev = "e8e0af870fcb5b56c9b8665c4f411a1b634abf13", features = ["egui", "creator"] }
+nodalia-theme = { git = "https://github.com/getnodalia/nodalia-design", rev = "8bb4b7dcbf186644ab606b806569c851056cee2c", features = ["egui", "creator", "engineering"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -11,7 +11,7 @@ publish = false
 
 [dependencies]
 # Without its `egui` feature the theme crate has no dependencies: it only names the accents.
-nodalia-theme = { git = "https://github.com/getnodalia/nodalia-design", rev = "e8e0af870fcb5b56c9b8665c4f411a1b634abf13" }
+nodalia-theme = { git = "https://github.com/getnodalia/nodalia-design", rev = "8bb4b7dcbf186644ab606b806569c851056cee2c" }
 
 [dev-dependencies]
 tempfile.workspace = true

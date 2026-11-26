@@ -51,6 +51,8 @@ pub enum Overlay {
     Branch(crate::vcs_ui::BranchSetup),
     Clone(crate::github_ui::CloneSetup),
     Item(Box<crate::github_ui::ItemView>),
+    Rename(crate::lsp_ui::RenameSetup),
+    References(crate::lsp_ui::RefsView),
 }
 
 impl Overlay {
@@ -271,6 +273,8 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::Branch(s) => crate::vcs_ui::branch_overlay(ctx, app, look, s),
         Overlay::Clone(s) => crate::github_ui::clone_overlay(ctx, app, look, s),
         Overlay::Item(v) => crate::github_ui::item_overlay(ctx, app, look, v),
+        Overlay::Rename(s) => crate::lsp_ui::rename_overlay(ctx, app, look, s),
+        Overlay::References(v) => crate::lsp_ui::references_overlay(ctx, app, look, v),
     };
     // A command run from inside an overlay may have opened another one: keep that.
     if matches!(app.overlay, Overlay::None) && !close {
@@ -571,6 +575,7 @@ fn preferences(ctx: &egui::Context, app: &mut App, look: &Look) -> Shown {
                     &mut s.highlight_active_line,
                 );
                 changed |= toggle_row(ui, tr("Show whitespace"), &mut s.show_whitespace);
+                changed |= toggle_row(ui, tr("Show the minimap"), &mut s.minimap);
                 changed |= toggle_row(
                     ui,
                     tr("Close brackets and quotes automatically"),

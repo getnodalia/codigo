@@ -62,6 +62,16 @@ pub struct Tab {
     pub view: editor::View,
 }
 
+/// Two views of the open files side by side. Each side shows one file; the side that has the
+/// keyboard follows the active tab, so choosing a tab fills the pane you are in.
+pub struct Split {
+    pub left: DocId,
+    pub right: DocId,
+    pub right_focused: bool,
+    /// The right side's own view when both sides show the same file.
+    pub twin: editor::View,
+}
+
 pub struct Toast {
     pub text: String,
     pub until: f64,
@@ -181,6 +191,8 @@ pub struct App {
     pub query: Option<crate::lsp_ui::InFlight>,
     /// The hover or completion popup next to the caret.
     pub popup: crate::lsp_ui::Popup,
+    /// Snippets: the person's own, and the one being filled in.
+    pub snippets: crate::snippets_ui::State,
     pub panel: Panel,
     pub sidebar_visible: bool,
     pub sidebar_width: f32,
@@ -201,6 +213,7 @@ pub struct App {
     applied: Option<(Appearance, bool, bool)>,
     decorated: Option<bool>,
     pub focus_editor: bool,
+    pub split: Option<Split>,
     pub session_dirty: bool,
     last_session: Instant,
     last_disk_check: Instant,
@@ -222,6 +235,9 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, open: &[PathBuf]) -> App {
         let settings = Settings::load();
         i18n::set(Lang::from_setting(&settings.language));
+        // The Engineering suite's type: IBM Plex Sans for the interface and Plex Mono for the
+        // editor and every value, with egui's faces and the system's behind them.
+        nodalia_theme::engineering::install_fonts(&cc.egui_ctx);
         let (tx, rx) = channel();
         // Compiling a grammar's queries costs ~20 ms the first time; do it for
         // the common languages off the UI thread so the first open is instant.
@@ -260,6 +276,7 @@ impl App {
             gh: crate::github_ui::GithubPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
+            snippets: crate::snippets_ui::State::new(),
             panel: Panel::Explorer,
             sidebar_visible: true,
             sidebar_width: 280.0,
@@ -282,6 +299,7 @@ impl App {
             applied: None,
             decorated: None,
             focus_editor: true,
+            split: None,
             session_dirty: false,
             last_session: Instant::now(),
             last_disk_check: Instant::now(),
@@ -341,6 +359,7 @@ impl App {
             Appearance::Light => for_egui::apply(ctx, &appearance(false)),
             Appearance::Dark => for_egui::apply(ctx, &appearance(true)),
         }
+        nodalia_theme::engineering::apply_text_styles(ctx);
     }
 
     pub fn sender(&self) -> Sender<Msg> {
@@ -1082,6 +1101,26 @@ impl App {
                 self.settings.show_whitespace = !self.settings.show_whitespace;
                 self.save_settings();
             }
+            ToggleSplit => {
+                self.split = match (self.split.take(), self.tabs.get(self.active)) {
+                    (None, Some(tab)) => {
+                        let mut twin = editor::View::new();
+                        twin.pane = 1;
+                        Some(Split {
+                            left: tab.doc.id(),
+                            right: tab.doc.id(),
+                            right_focused: false,
+                            twin,
+                        })
+                    }
+                    _ => None,
+                };
+                self.focus_editor = true;
+            }
+            ToggleMinimap => {
+                self.settings.minimap = !self.settings.minimap;
+                self.save_settings();
+            }
             ZoomIn => self.zoom(1.0),
             ZoomOut => self.zoom(-1.0),
             ZoomReset => {
@@ -1121,6 +1160,10 @@ impl App {
                 }
             }
             GoToDefinition => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Definition, false),
+            FindReferences => crate::lsp_ui::ask(self, codigo_engine::QueryKind::References, false),
+            RenameSymbol => crate::lsp_ui::open_rename(self),
+            EditSnippets => crate::snippets_ui::open_user_file(self),
+            FormatDocument => crate::lsp_ui::format_document(self),
             ShowHover => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Hover, false),
             TriggerCompletion => {
                 crate::lsp_ui::ask(self, codigo_engine::QueryKind::Completion, false)
@@ -1501,6 +1544,15 @@ impl App {
         }
     }
 
+    /// Which view of the active file has the keyboard: 1 only in a split of one file with the
+    /// right side focused.
+    pub fn active_pane(&self) -> u8 {
+        match &self.split {
+            Some(s) if s.right_focused && s.left == s.right => 1,
+            _ => 0,
+        }
+    }
+
     pub fn editor_options(&self) -> editor::Options {
         editor::Options {
             font_size: self.settings.font_size,
@@ -1508,6 +1560,7 @@ impl App {
             line_numbers: self.settings.line_numbers,
             highlight_line: self.settings.highlight_active_line,
             whitespace: self.settings.show_whitespace,
+            minimap: self.settings.minimap,
             auto_close_pairs: self.settings.auto_close_pairs,
         }
     }
@@ -1521,6 +1574,7 @@ impl App {
             self.last_edit = Some(Instant::now());
         }
         crate::lsp_ui::update(self, out.edited);
+        crate::snippets_ui::update(self);
         if let Some(line) = out.gutter_click {
             if let Some(path) = self
                 .tabs
@@ -1645,10 +1699,13 @@ impl eframe::App for App {
             }
         }
 
-        let editor_focus = self.tabs.get(self.active).is_some_and(|t| {
-            ctx.memory(|m| m.has_focus(egui::Id::unique(("codigo-editor", t.doc.id().0))))
-        });
+        let pane = self.active_pane();
+        let editor_focus = self
+            .tabs
+            .get(self.active)
+            .is_some_and(|t| ctx.memory(|m| m.has_focus(editor::editor_id(t.doc.id().0, pane))));
         crate::lsp_ui::keys(self, &ctx);
+        crate::snippets_ui::keys(self, &ctx, editor_focus);
         crate::terminal_ui::input(self, &ctx);
         self.shortcuts(&ctx, editor_focus);
         self.refresh_find();

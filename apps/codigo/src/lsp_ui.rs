@@ -3,14 +3,24 @@
 //! The request goes out on a command, the answer is polled each frame, and the result is either a
 //! jump or a popup next to the caret.
 
-use codigo_engine::{char_in_line, Answer, CompletionItem, DocId, Query, QueryError, QueryKind};
-use codigo_text::Edit;
-use egui::{pos2, vec2, Align2, CornerRadius, FontId, Key, Modifiers, Order, Stroke};
-use nodalia_theme::creator::Look;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use codigo_engine::{
+    char_in_line, edits_for, Answer, CompletionItem, DocId, FileChange, Place, Query, QueryError,
+    QueryKind,
+};
+use codigo_text::{Edit, Indent};
+use egui::{
+    pos2, vec2, Align2, CornerRadius, FontId, Key, Modifiers, Order, RichText, ScrollArea, Stroke,
+};
+use nodalia_theme::creator::{self as cr, Look};
+use nodalia_theme::font_size;
 use nodalia_theme::for_egui::color;
 
 use crate::app::App;
-use crate::i18n::tr;
+use crate::i18n::{tr, trf};
+use crate::overlays::{heading, modal, Overlay, Shown};
 
 /// At most this many rows of the completion list are shown at once.
 const ROWS: usize = 10;
@@ -114,17 +124,24 @@ pub fn poll(app: &mut App) {
                 }
                 return;
             };
-            if !app.open_path(&place.path, Some(place.line), true) {
+            jump(app, &place.path, place.line, place.character);
+        }
+        Ok(Answer::References(places)) => {
+            if places.is_empty() {
+                app.toast(tr("No references found."));
                 return;
             }
-            if let Some(tab) = app.tabs.get_mut(app.active) {
-                let col = char_in_line(&tab.doc, place.line, place.character);
-                tab.doc.navigate(|b| {
-                    let line = place.line.min(b.line_count().saturating_sub(1));
-                    b.set_cursor(b.line_start(line) + col);
-                });
-                tab.view.reveal = true;
+            let word = word_at(app, flight.anchor);
+            app.overlay = Overlay::References(references_view(app, word, places));
+        }
+        Ok(Answer::Edits(changes)) => {
+            if !fresh {
+                app.toast(tr(
+                    "The text changed while the server was working. Try again.",
+                ));
+                return;
             }
+            apply_changes(app, changes, flight.query.kind == QueryKind::Format);
         }
         Ok(Answer::Hover(text)) if fresh => match (text, app.tabs.get(app.active)) {
             (Some(text), Some(tab)) => {
@@ -151,6 +168,355 @@ pub fn poll(app: &mut App) {
         }
         Ok(_) => {}
     }
+}
+
+/// Open `path` and put the caret at a server's line and UTF-16 column.
+fn jump(app: &mut App, path: &Path, line: usize, character: u32) {
+    if !app.open_path(path, Some(line), true) {
+        return;
+    }
+    if let Some(tab) = app.tabs.get_mut(app.active) {
+        let col = char_in_line(&tab.doc, line, character);
+        tab.doc.navigate(|b| {
+            let line = line.min(b.line_count().saturating_sub(1));
+            b.set_cursor(b.line_start(line) + col);
+        });
+        tab.view.reveal = true;
+    }
+}
+
+fn tab_for(app: &App, path: &Path) -> Option<usize> {
+    let want = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    app.tabs.iter().position(|t| {
+        t.doc
+            .path()
+            .is_some_and(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) == want)
+    })
+}
+
+/// Make a server's edits. Files that are not open are opened first, so the changes show as
+/// unsaved edits that can be reviewed, undone or saved.
+fn apply_changes(app: &mut App, changes: Vec<FileChange>, format: bool) {
+    let back = app.tabs.get(app.active).map(|t| t.doc.id());
+    let (mut places, mut files, mut skipped) = (0usize, 0usize, 0usize);
+    for change in changes {
+        if change.edits.is_empty() {
+            continue;
+        }
+        if tab_for(app, &change.path).is_none() {
+            app.open_path(&change.path, None, false);
+        }
+        let Some(i) = tab_for(app, &change.path) else {
+            skipped += 1;
+            continue;
+        };
+        let Some(tab) = app.tabs.get_mut(i) else {
+            continue;
+        };
+        let edits = edits_for(&tab.doc, &change.edits);
+        let count = edits.len();
+        let mut applied = false;
+        tab.doc.apply(|b| match b.apply_edits(edits) {
+            Some(changes) => {
+                applied = true;
+                changes
+            }
+            None => Vec::new(),
+        });
+        if applied {
+            tab.view.reveal = false;
+            places += count;
+            files += 1;
+        } else {
+            skipped += 1;
+        }
+    }
+    if let Some(id) = back {
+        if let Some(i) = app.tabs.iter().position(|t| t.doc.id() == id) {
+            app.active = i;
+        }
+    }
+    let message = if skipped > 0 && files == 0 {
+        tr("The server's changes could not be applied.").to_owned()
+    } else if format && files == 0 {
+        tr("Already formatted.").to_owned()
+    } else if format {
+        tr("Formatted.").to_owned()
+    } else if files == 0 {
+        tr("Nothing to change.").to_owned()
+    } else {
+        trf(
+            "Changed {} places in {} files.",
+            &[&places.to_string(), &files.to_string()],
+        )
+    };
+    app.toast(message);
+}
+
+/// Format the active file with its language server.
+pub fn format_document(app: &mut App) {
+    let Some(tab) = app.tabs.get(app.active) else {
+        return;
+    };
+    let (size, spaces) = match tab.doc.buffer().indent {
+        Indent::Tabs => (
+            u32::try_from(tab.doc.buffer().tab_width).unwrap_or(4),
+            false,
+        ),
+        Indent::Spaces(n) => (u32::try_from(n).unwrap_or(4), true),
+    };
+    let (doc, revision) = (tab.doc.id(), tab.doc.buffer().revision());
+    let result = app.lsp.format(&tab.doc, size, spaces);
+    match result {
+        Ok(query) => {
+            app.query = Some(InFlight {
+                query,
+                doc,
+                revision,
+                anchor: 0,
+                quiet: false,
+            });
+        }
+        Err(QueryError::NoServer) => app.toast(tr("There is no language server for this file.")),
+        Err(QueryError::NotReady) => app.toast(tr("The language server is not ready yet.")),
+    }
+}
+
+/// The identifier that touches char offset `at` of the active file; empty when there is none.
+fn word_at(app: &App, at: usize) -> String {
+    let Some(tab) = app.tabs.get(app.active) else {
+        return String::new();
+    };
+    let b = tab.doc.buffer();
+    let (mut start, mut end) = (at.min(b.len_chars()), at.min(b.len_chars()));
+    while start > 0 && b.slice(start - 1..start).chars().all(is_word) {
+        start -= 1;
+    }
+    while end < b.len_chars() && b.slice(end..end + 1).chars().all(is_word) {
+        end += 1;
+    }
+    b.slice(start..end)
+}
+
+pub struct RenameSetup {
+    name: String,
+    old: String,
+    doc: DocId,
+    at: usize,
+    focus: bool,
+}
+
+/// Ask for the new name of the symbol under the caret.
+pub fn open_rename(app: &mut App) {
+    let Some(tab) = app.tabs.get(app.active) else {
+        return;
+    };
+    let at = tab.doc.buffer().primary().head;
+    let doc = tab.doc.id();
+    let old = word_at(app, at);
+    if old.is_empty() {
+        app.toast(tr("Put the caret on a name to rename it."));
+        return;
+    }
+    app.overlay = Overlay::Rename(RenameSetup {
+        name: old.clone(),
+        old,
+        doc,
+        at,
+        focus: true,
+    });
+}
+
+fn start_rename(app: &mut App, setup: &RenameSetup) {
+    let Some(tab) = app.tabs.get(app.active).filter(|t| t.doc.id() == setup.doc) else {
+        return;
+    };
+    let revision = tab.doc.buffer().revision();
+    let result = app.lsp.rename(&tab.doc, setup.at, setup.name.trim());
+    match result {
+        Ok(query) => {
+            app.query = Some(InFlight {
+                query,
+                doc: setup.doc,
+                revision,
+                anchor: setup.at,
+                quiet: false,
+            });
+        }
+        Err(QueryError::NoServer) => app.toast(tr("There is no language server for this file.")),
+        Err(QueryError::NotReady) => app.toast(tr("The language server is not ready yet.")),
+    }
+}
+
+pub fn rename_overlay(
+    ctx: &egui::Context,
+    app: &mut App,
+    look: &Look,
+    mut setup: RenameSetup,
+) -> Shown {
+    let mut closed = false;
+    let mut go = false;
+    let dismissed = modal(ctx, look, "rename", 440.0, true, |ui| {
+        closed = heading(ui, look, tr("Rename symbol"), "rename");
+        let response = cr::field_frame(look)
+            .inner_margin(egui::Margin::symmetric(10, 4))
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut setup.name)
+                        .frame(egui::Frame::NONE)
+                        .hint_text(tr("New name"))
+                        .align(Align2::LEFT_CENTER)
+                        .desired_width(f32::INFINITY)
+                        .font(FontId::proportional(font_size::LARGE)),
+                )
+            })
+            .inner;
+        if setup.focus {
+            response.request_focus();
+            // Select the old name so typing replaces it.
+            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
+                state
+                    .cursor
+                    .set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(setup.name.chars().count()),
+                    )));
+                state.store(ui.ctx(), response.id);
+            }
+            setup.focus = false;
+        }
+        if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter)) {
+            go = true;
+        }
+    });
+    if closed || dismissed {
+        return (Overlay::None, true);
+    }
+    let name = setup.name.trim();
+    if go && !name.is_empty() && name != setup.old && !name.contains(char::is_whitespace) {
+        start_rename(app, &setup);
+        return (Overlay::None, true);
+    }
+    (Overlay::Rename(setup), false)
+}
+
+pub struct RefItem {
+    path: PathBuf,
+    line: usize,
+    character: u32,
+    preview: String,
+}
+
+pub struct RefsView {
+    word: String,
+    items: Vec<RefItem>,
+    root: Option<PathBuf>,
+}
+
+fn references_view(app: &App, word: String, places: Vec<Place>) -> RefsView {
+    // Read each file once; a file that is open is read from its buffer, which may be unsaved.
+    let mut lines: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    let items = places
+        .into_iter()
+        .map(|p| {
+            let all = lines.entry(p.path.clone()).or_insert_with(|| {
+                match tab_for(app, &p.path).and_then(|i| app.tabs.get(i)) {
+                    Some(tab) => tab.doc.buffer().text().lines().map(str::to_owned).collect(),
+                    None => read_lines(&p.path),
+                }
+            });
+            let preview = all
+                .get(p.line)
+                .map(|l| l.trim().chars().take(160).collect())
+                .unwrap_or_default();
+            RefItem {
+                path: p.path,
+                line: p.line,
+                character: p.character,
+                preview,
+            }
+        })
+        .collect();
+    RefsView {
+        word,
+        items,
+        root: app.project.as_ref().map(|p| p.root.clone()),
+    }
+}
+
+/// The lines of a file, for previews. A file too big to be source is not read.
+fn read_lines(path: &Path) -> Vec<String> {
+    const MAX: u64 = 2_000_000;
+    if std::fs::metadata(path).map_or(true, |m| m.len() > MAX) {
+        return Vec::new();
+    }
+    std::fs::read_to_string(path)
+        .map(|t| t.lines().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+pub fn references_overlay(
+    ctx: &egui::Context,
+    app: &mut App,
+    look: &Look,
+    view: RefsView,
+) -> Shown {
+    let p = look.palette;
+    let mut closed = false;
+    let mut pick: Option<usize> = None;
+    let dismissed = modal(ctx, look, "references", 720.0, true, |ui| {
+        let title = trf(
+            "{} references to “{}”",
+            &[&view.items.len().to_string(), &view.word],
+        );
+        closed = heading(ui, look, &title, "references");
+        ScrollArea::vertical().max_height(440.0).show(ui, |ui| {
+            for (n, item) in view.items.iter().enumerate() {
+                let shown = view
+                    .root
+                    .as_ref()
+                    .and_then(|r| item.path.strip_prefix(r).ok())
+                    .unwrap_or(&item.path);
+                let head = format!("{}:{}", shown.display(), item.line + 1);
+                let response = ui
+                    .vertical(|ui| {
+                        ui.set_min_width(ui.available_width());
+                        ui.label(
+                            RichText::new(head)
+                                .font(FontId::proportional(12.0))
+                                .color(color(p.text_secondary)),
+                        );
+                        ui.label(
+                            RichText::new(&item.preview)
+                                .font(FontId::monospace(13.0))
+                                .color(color(p.text_primary)),
+                        );
+                    })
+                    .response
+                    .interact(egui::Sense::click());
+                if response.hovered() {
+                    ui.painter().rect_filled(
+                        response.rect.expand(2.0),
+                        CornerRadius::same(6),
+                        color(p.accent_default).gamma_multiply(0.12),
+                    );
+                }
+                if response.clicked() {
+                    pick = Some(n);
+                }
+                ui.add_space(4.0);
+            }
+        });
+    });
+    if closed || dismissed {
+        return (Overlay::None, true);
+    }
+    if let Some(item) = pick.and_then(|n| view.items.get(n)) {
+        jump(app, &item.path, item.line, item.character);
+        app.focus_editor = true;
+        return (Overlay::None, true);
+    }
+    (Overlay::References(view), false)
 }
 
 /// The items still matching what has been typed since the word began.
