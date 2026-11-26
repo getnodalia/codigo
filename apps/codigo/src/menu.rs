@@ -136,6 +136,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(AnalyzeProject),
             ]),
         ),
+        (tr("Nodalia"), items(&[some(NewNodaliaApp)])),
     ]
 }
 

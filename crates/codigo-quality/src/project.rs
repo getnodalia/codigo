@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::duplication::{self, Source};
 use crate::rules::{Finding, Severity};
-use crate::{analyze_text, MAX_FILE_BYTES};
+use crate::{analyze_text_with, nodalia, MAX_FILE_BYTES};
 
 /// Files analysed per project at most.
 const MAX_FILES: usize = 20_000;
@@ -94,6 +94,7 @@ fn skipped(path: &str) -> bool {
 /// skipped. Stops early, with `truncated` set, when `cancel` is.
 pub fn analyze_project(root: &Path, cancel: &AtomicBool) -> Report {
     let mut report = Report::default();
+    let is_nodalia = nodalia::detect(root);
     let files = codigo_workspace::list_files(root, MAX_FILES, cancel);
     let mut loaded: Vec<(PathBuf, String, &'static codigo_syntax::LanguageDef)> = Vec::new();
     for rel in files {
@@ -115,7 +116,7 @@ pub fn analyze_project(root: &Path, cancel: &AtomicBool) -> Report {
             codigo_syntax::detect_with_first_line(&file_name, text.lines().next().unwrap_or(""));
         report.files += 1;
         report.lines += text.lines().count();
-        for finding in analyze_text(lang, &name, &text) {
+        for finding in analyze_text_with(lang, &name, &text, is_nodalia) {
             report.findings.push(ProjectFinding {
                 path: rel.clone(),
                 finding,
@@ -123,6 +124,32 @@ pub fn analyze_project(root: &Path, cancel: &AtomicBool) -> Report {
         }
         if CODE.contains(&lang.id) {
             loaded.push((rel, text, lang));
+        }
+    }
+    if is_nodalia && !report.truncated {
+        let rust: Vec<(usize, String)> = loaded
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, _, lang))| lang.id == "rust")
+            .map(|(i, (p, _, _))| (i, p.to_string_lossy().into_owned()))
+            .collect();
+        let sources: Vec<nodalia::Source> = rust
+            .iter()
+            .filter_map(|(i, path)| {
+                loaded
+                    .get(*i)
+                    .map(|(_, text, _)| nodalia::Source { path, text })
+            })
+            .collect();
+        for (k, finding) in nodalia::check(&sources) {
+            if let Some((i, _)) = rust.get(k) {
+                if let Some((path, _, _)) = loaded.get(*i) {
+                    report.findings.push(ProjectFinding {
+                        path: path.clone(),
+                        finding,
+                    });
+                }
+            }
         }
     }
     if !report.truncated {
@@ -238,5 +265,37 @@ mod tests {
             .collect();
         assert_eq!(dup.len(), 1);
         assert_eq!(dup[0].path, PathBuf::from("b.py"));
+    }
+
+    #[test]
+    fn a_nodalia_project_gets_nodalia_rules_and_others_do_not() {
+        let d = tempfile::tempdir().expect("tempdir");
+        let p = d.path();
+        fs::create_dir_all(p.join("src")).expect("src");
+        fs::write(
+            p.join("src/spanish.rs"),
+            "// SPDX-License-Identifier: MIT OR Apache-2.0\npub const SPANISH: &[(&str, &str)] = &[(\"Open\", \"Abrir\")];\n",
+        )
+        .expect("table");
+        fs::write(
+            p.join("src/app.rs"),
+            "fn f(ui: &mut Ui) {\n    ui.label(tr(\"Close\"));\n    let c = Color32::from_rgb(1, 2, 3);\n}\n",
+        )
+        .expect("app");
+        let plain = analyze_project(p, &AtomicBool::new(false));
+        assert!(plain
+            .findings
+            .iter()
+            .all(|f| !f.finding.rule.id.starts_with("ndl-")));
+        fs::write(p.join("Cargo.toml"), "[dependencies]\nnodalia-theme = {}\n").expect("toml");
+        let report = analyze_project(p, &AtomicBool::new(false));
+        let ids: Vec<_> = report.findings.iter().map(|f| f.finding.rule.id).collect();
+        for id in [
+            "ndl-colour-literal",
+            "ndl-missing-spanish",
+            "ndl-missing-spdx",
+        ] {
+            assert!(ids.contains(&id), "{id} in {ids:?}");
+        }
     }
 }

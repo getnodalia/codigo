@@ -35,6 +35,13 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   of code that were copied. Findings are listed worst first under a quality gate, and a click
   opens the exact place. Put `codigo-ignore` on a line to silence it. Fixes from the editor and
   dependency advisories are not there yet.
+- **Tools for building Nodalia apps.** The Nodalia menu has *New Nodalia app*: it creates a Rust
+  egui app in the Nodalia Design Language with the shared theme, an About window, Spanish and
+  English with the test that checks every string, the lints and the CI the other apps use, and
+  opens it. In a folder that depends on the Nodalia theme, the Quality tab also checks Nodalia's
+  engineering rules: colours written in the code instead of taken from the tokens, interface text
+  that skips `tr()`, strings missing from the `SPANISH` table, and files without a licence header.
+  A theme and token preview and helpers for icons are not there yet.
 - **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
   the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
@@ -63,7 +70,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 ## Layout
 
 `crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
-(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-quality` (quality and security analysis), `crates/codigo-workspace` (folders, fuzzy matching, project search,
+(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-quality` (quality and security analysis), `crates/codigo-nodalia` (project templates for Nodalia apps), `crates/codigo-workspace` (folders, fuzzy matching, project search,
 git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
 app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
 

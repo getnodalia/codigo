@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! In-app updates: a quiet check when Código starts, "Check for updates…" in the main menu, and
 //! the windows that offer a new release and install it. The flow and the windows are
 //! `nodalia-update`'s, shared with the other Nodalia apps; this file is what is Código's own.

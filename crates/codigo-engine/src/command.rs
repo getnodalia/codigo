@@ -245,6 +245,7 @@ pub enum Category {
     View,
     Go,
     Run,
+    Nodalia,
     Help,
 }
 
@@ -258,6 +259,7 @@ impl Category {
             Category::View => "View",
             Category::Go => "Go",
             Category::Run => "Run",
+            Category::Nodalia => "Nodalia",
             Category::Help => "Help",
         }
     }
@@ -355,6 +357,8 @@ commands! {
     CheckProject => ("run.check", "Check the code", Run, NONE),
     StopRun => ("run.stop", "Stop the running program", Run, shift(Key::F5)),
     AnalyzeProject => ("quality.analyze", "Analyze the code quality and security", Run, ctrl_shift(Key::Y)),
+
+    NewNodaliaApp => ("nodalia.newApp", "New Nodalia app…", Nodalia, NONE),
 
     QuickOpen => ("go.quickOpen", "Go to file…", Go, ctrl(Key::P)),
     GoToLine => ("go.line", "Go to line…", Go, ctrl(Key::G)),

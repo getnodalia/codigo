@@ -7,7 +7,7 @@ file lists what exists and what does not. Nothing under "Next" is available yet.
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, hover, completion and go to definition, a drawn symbol per file type in the explorer and tabs, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion and go to definition, a drawn symbol per file type in the explorer and tabs, a terminal and run console, code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
@@ -25,10 +25,11 @@ restore, language server diagnostics, hover, completion and go to definition, a 
    panel with a gate. Still to do: the language servers' diagnostics and each language's own
    linters (clippy and others) in the same panel, dependency advisories, more languages' rules,
    findings in the editor margin, per-project rule settings, and fixes that apply from the editor.
-4. **Tools for building Nodalia apps.** Project templates for NDL apps, a component and theme
-   preview, helpers for tokens, icons and Spanish catalogs, and checks for the Nodalia
-   engineering rules (no unwrap, strings through i18n, colours from tokens) so the editor helps
-   keep every app coherent.
+4. **Tools for building Nodalia apps.** A project template (New Nodalia app) and the Nodalia
+   engineering-rule checks in the Quality panel (colours from tokens, strings through `tr()`,
+   Spanish table complete, licence headers) exist. Still to do: more templates (GTK, a server),
+   a component and theme preview, helpers for tokens and icons, and checks for the remaining
+   rules (no unwrap in a crate without the lint, wasm builds, assets in `ATTRIBUTION.md`).
 5. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`
    crate, with the provider chosen by the user and keys kept in the system keyring. Nothing leaves
    the computer without being asked. Review of a change for quality and security comes with it.

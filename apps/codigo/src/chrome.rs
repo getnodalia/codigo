@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The window frame when Código draws its own (Linux, unless the person picked the system's):
 //! the empty part of the top bar moves the window, a double click maximizes it, the edges
 //! resize it, and the NDL controls sit on the right. Windows keeps its native frame. macOS keeps

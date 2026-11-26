@@ -41,6 +41,7 @@ pub enum Overlay {
     GoToLine(String),
     Language(Picker),
     Preferences,
+    NewApp(crate::nodalia_ui::NewApp),
     Shortcuts(String),
     About,
     Confirm(Confirm),
@@ -217,7 +218,7 @@ fn picker_ui(
     choice
 }
 
-fn modal(
+pub(crate) fn modal(
     ctx: &egui::Context,
     look: &Look,
     id: &'static str,
@@ -254,6 +255,7 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::GoToLine(text) => go_to_line(ctx, app, look, text),
         Overlay::Language(picker) => language(ctx, app, look, picker),
         Overlay::Preferences => preferences(ctx, app, look),
+        Overlay::NewApp(state) => crate::nodalia_ui::new_app(ctx, app, look, state),
         Overlay::Shortcuts(filter) => shortcuts(ctx, look, filter),
         Overlay::About => about_window(ctx, look),
         Overlay::Confirm(c) => confirm(ctx, app, look, c),
@@ -264,7 +266,7 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
     }
 }
 
-type Shown = (Overlay, bool);
+pub(crate) type Shown = (Overlay, bool);
 
 fn palette(ctx: &egui::Context, app: &mut App, look: &Look, mut picker: Picker) -> Shown {
     let mac = cfg!(target_os = "macos");
@@ -471,7 +473,7 @@ fn language(ctx: &egui::Context, app: &mut App, look: &Look, mut picker: Picker)
     (Overlay::Language(picker), false)
 }
 
-fn heading(ui: &mut Ui, look: &Look, title: &str, id: &str) -> bool {
+pub(crate) fn heading(ui: &mut Ui, look: &Look, title: &str, id: &str) -> bool {
     let h = about::heading(ui, look, title, Id::unique(id).with("close"));
     h.closed
 }
@@ -650,6 +652,7 @@ fn shortcuts(ctx: &egui::Context, look: &Look, mut filter: String) -> Shown {
                     Category::View,
                     Category::Go,
                     Category::Run,
+                    Category::Nodalia,
                     Category::Help,
                 ] {
                     let rows: Vec<&Cmd> = Cmd::ALL
