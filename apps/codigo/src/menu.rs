@@ -110,6 +110,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(ShowDebug),
                 some(ToggleWordWrap),
                 some(ToggleWhitespace),
+                some(ToggleMinimap),
                 None,
                 some(ZoomIn),
                 some(ZoomOut),

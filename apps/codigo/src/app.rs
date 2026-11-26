@@ -1085,6 +1085,10 @@ impl App {
                 self.settings.show_whitespace = !self.settings.show_whitespace;
                 self.save_settings();
             }
+            ToggleMinimap => {
+                self.settings.minimap = !self.settings.minimap;
+                self.save_settings();
+            }
             ZoomIn => self.zoom(1.0),
             ZoomOut => self.zoom(-1.0),
             ZoomReset => {
@@ -1515,6 +1519,7 @@ impl App {
             line_numbers: self.settings.line_numbers,
             highlight_line: self.settings.highlight_active_line,
             whitespace: self.settings.show_whitespace,
+            minimap: self.settings.minimap,
             auto_close_pairs: self.settings.auto_close_pairs,
         }
     }

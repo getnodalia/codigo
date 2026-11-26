@@ -45,6 +45,8 @@ pub struct Settings {
     pub line_numbers: bool,
     pub highlight_active_line: bool,
     pub show_whitespace: bool,
+    /// The overview strip beside the editor.
+    pub minimap: bool,
     pub auto_close_pairs: bool,
     pub trim_trailing_whitespace_on_save: bool,
     pub insert_final_newline_on_save: bool,
@@ -71,6 +73,7 @@ impl Default for Settings {
             line_numbers: true,
             highlight_active_line: true,
             show_whitespace: false,
+            minimap: true,
             auto_close_pairs: true,
             trim_trailing_whitespace_on_save: false,
             insert_final_newline_on_save: false,

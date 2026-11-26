@@ -575,6 +575,7 @@ fn preferences(ctx: &egui::Context, app: &mut App, look: &Look) -> Shown {
                     &mut s.highlight_active_line,
                 );
                 changed |= toggle_row(ui, tr("Show whitespace"), &mut s.show_whitespace);
+                changed |= toggle_row(ui, tr("Show the minimap"), &mut s.minimap);
                 changed |= toggle_row(
                     ui,
                     tr("Close brackets and quotes automatically"),
