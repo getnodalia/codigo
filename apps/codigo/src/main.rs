@@ -27,6 +27,7 @@ mod layout;
 mod linux_menu;
 mod lsp_ui;
 mod menu;
+mod nodalia_ui;
 mod overlays;
 mod quality_ui;
 mod spanish;

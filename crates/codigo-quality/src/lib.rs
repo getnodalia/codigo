@@ -18,6 +18,7 @@
 
 mod duplication;
 mod lines;
+mod nodalia;
 mod project;
 mod rules;
 mod structure;
@@ -33,6 +34,17 @@ pub const MAX_FILE_BYTES: usize = 1024 * 1024;
 /// Every finding in one file: the line rules and the structure rules. `path` only decides whether
 /// the file is test code (`tests/`, `benches/`), where shortcuts such as `unwrap` are fine.
 pub fn analyze_text(lang: &'static LanguageDef, path: &str, text: &str) -> Vec<Finding> {
+    analyze_text_with(lang, path, text, false)
+}
+
+/// [`analyze_text`], also checking Nodalia's engineering rules (`ndl-…`) when `nodalia` is set:
+/// colours from the theme tokens, interface text through the translation functions.
+pub fn analyze_text_with(
+    lang: &'static LanguageDef,
+    path: &str,
+    text: &str,
+    nodalia: bool,
+) -> Vec<Finding> {
     if text.len() > MAX_FILE_BYTES || ignored_file(text) {
         return Vec::new();
     }
@@ -42,7 +54,7 @@ pub fn analyze_text(lang: &'static LanguageDef, path: &str, text: &str) -> Vec<F
         s.reparse(&rope);
     }
     let tree = syntax.as_ref().and_then(|s| s.tree());
-    let mut out = lines::check(lang, path, text, tree);
+    let mut out = lines::check(lang, path, text, tree, nodalia);
     if let Some(tree) = tree {
         structure::check(tree, text, &mut out);
     }

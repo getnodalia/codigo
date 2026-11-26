@@ -40,6 +40,7 @@ pub fn kind_name(kind: Kind) -> &'static str {
         Kind::Hotspot => tr("Security hotspot"),
         Kind::Secret => tr("Secret"),
         Kind::Smell => tr("Code smell"),
+        Kind::Convention => tr("Nodalia rule"),
     }
 }
 

@@ -929,6 +929,7 @@ impl App {
                     self.toast(tr("Open a folder first."));
                 }
             }
+            NewNodaliaApp => self.overlay = Overlay::NewApp(crate::nodalia_ui::NewApp::new(self)),
             GoToLine => {
                 if self.active_tab().is_some() {
                     self.overlay = Overlay::go_to_line();

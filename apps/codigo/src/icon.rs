@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The app icon: Ada Lovelace, who wrote the first program, from Alfred Edward Chalon's 1840
 //! portrait (Wikimedia Commons, public domain), in black and white on Código's green. The same
 //! PNG is the window icon and the logo drawn in the app.
@@ -63,7 +64,14 @@ pub fn texture(ctx: &egui::Context) -> TextureHandle {
             ],
             &rgba,
         ),
-        None => ColorImage::new([1, 1], vec![egui::Color32::from_rgb(0x0F, 0x7C, 0x80)]),
+        None => ColorImage::new(
+            [1, 1],
+            vec![nodalia_theme::for_egui::color(
+                nodalia_theme::Mode::Dark
+                    .palette_with(nodalia_theme::Accent::Codigo)
+                    .accent_default,
+            )],
+        ),
     };
     let texture = ctx.load_texture("codigo-icon", image, TextureOptions::LINEAR);
     ctx.data_mut(|d| d.insert_temp(id, texture.clone()));

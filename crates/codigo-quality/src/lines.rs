@@ -183,6 +183,22 @@ fn patterns() -> &'static [Pattern] {
                 ..p("debug-output", r"\bbreakpoint\(\)|\bpdb\.set_trace\(", Scope::Code)
             },
             p("todo-comment", r"\b(?:TODO|FIXME|HACK|XXX)\b", Scope::Comment),
+            Pattern {
+                langs: &["rust"],
+                ..p(
+                    "ndl-colour-literal",
+                    r"\bColor32::(?:from_(?:rgb|rgba_unmultiplied|rgba_premultiplied)\(\s*(?:0x[0-9A-Fa-f]+|\d+)\s*,|from_gray\(\s*\d+\s*\)|(?:BLACK|RED|GREEN|BLUE|YELLOW|GRAY|DARK_GRAY|LIGHT_GRAY|BROWN|ORANGE|GOLD|PURPLE|LIGHT_BLUE|LIGHT_GREEN|LIGHT_RED|LIGHT_YELLOW|DARK_RED|DARK_GREEN|DARK_BLUE)\b)",
+                    Scope::Code,
+                )
+            },
+            Pattern {
+                langs: &["rust"],
+                ..p(
+                    "ndl-untranslated-string",
+                    r#"\.(?:label|heading|button|small_button|selectable_label|on_hover_text|hint_text|hyperlink)\(\s*"(?:[^"\\]|\\.)*[A-Za-z]{2}|\bRichText::new\(\s*"(?:[^"\\]|\\.)*[A-Za-z]{2}|\b(?:primary|secondary)_button(?:_min)?\([^()"]*"(?:[^"\\]|\\.)*[A-Za-z]{2}"#,
+                    Scope::Code,
+                )
+            },
         ]
     })
 }
@@ -323,6 +339,7 @@ pub(crate) fn check(
     path: &str,
     text: &str,
     tree: Option<&Tree>,
+    nodalia: bool,
 ) -> Vec<Finding> {
     let test_file = is_test_path(path);
     let mut out = Vec::new();
@@ -343,7 +360,12 @@ pub(crate) fn check(
             if !pattern.langs.is_empty() && !pattern.langs.contains(&lang.id) {
                 continue;
             }
-            if (test_file || in_test_module) && matches!(pattern.rule, "may-panic" | "debug-output")
+            if pattern.rule.starts_with("ndl-") && !nodalia {
+                continue;
+            }
+            if (test_file || in_test_module)
+                && (matches!(pattern.rule, "may-panic" | "debug-output")
+                    || pattern.rule.starts_with("ndl-"))
             {
                 continue;
             }
@@ -525,5 +547,49 @@ mod tests {
         assert!(ids("python", "a.py", "").is_empty());
         assert!(ids("plain", "notes.txt", "password = \"Zq8f2Lm9Xw4Kp7\"\n")
             .contains(&"hardcoded-secret"));
+    }
+
+    fn ndl_ids(path: &str, text: &str, nodalia: bool) -> Vec<&'static str> {
+        let lang = codigo_syntax::find("rust").unwrap_or_else(codigo_syntax::plain);
+        crate::analyze_text_with(lang, path, text, nodalia)
+            .into_iter()
+            .map(|f| f.rule.id)
+            .collect()
+    }
+
+    #[test]
+    fn nodalia_rules_apply_only_to_nodalia_projects() {
+        let colour = "fn f() { let c = Color32::from_rgb(1, 2, 3); }\n";
+        assert_eq!(ndl_ids("src/ui.rs", colour, true), ["ndl-colour-literal"]);
+        assert!(ndl_ids("src/ui.rs", colour, false).is_empty());
+        assert!(ndl_ids("src/ui.rs", "let t = Color32::WHITE;\n", true).is_empty());
+        assert!(ndl_ids("src/ui.rs", "let t = color(p.text_primary);\n", true).is_empty());
+        assert!(ndl_ids("tests/ui.rs", colour, true).is_empty());
+    }
+
+    #[test]
+    fn text_that_skips_the_translation_functions_is_found() {
+        for bad in [
+            "ui.label(\"Hello there\");\n",
+            "ui.button(\"Save\");\n",
+            "RichText::new(\"Title\");\n",
+            "cr::primary_button(ui, &look, \"Create\", true);\n",
+            "x.on_hover_text(\"More\");\n",
+        ] {
+            assert_eq!(
+                ndl_ids("src/ui.rs", bad, true),
+                ["ndl-untranslated-string"],
+                "{bad}"
+            );
+        }
+        for fine in [
+            "ui.label(tr(\"Hello there\"));\n",
+            "ui.label(\"•\");\n",
+            "ui.label(format!(\"{}\", x));\n",
+            "cr::primary_button(ui, &look, tr(\"Create\"), true);\n",
+            "// ui.label(\"Hello\")\n",
+        ] {
+            assert!(ndl_ids("src/ui.rs", fine, true).is_empty(), "{fine}");
+        }
     }
 }

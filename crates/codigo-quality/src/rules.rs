@@ -25,6 +25,8 @@ pub enum Kind {
     Secret,
     /// Code that is hard to read, change or trust.
     Smell,
+    /// A rule of Nodalia's engineering standards, for apps that follow them.
+    Convention,
 }
 
 /// One rule. `title` is an English sentence the interface translates; when it has a `{}` the
@@ -80,7 +82,7 @@ pub fn rule(id: &str) -> Option<&'static Rule> {
     RULES.iter().find(|r| r.id == id)
 }
 
-use Kind::{Bug, Hotspot, Secret, Smell, Vulnerability};
+use Kind::{Bug, Convention, Hotspot, Secret, Smell, Vulnerability};
 use Severity::{Blocker, Critical, Info, Major, Minor};
 
 macro_rules! rule {
@@ -228,6 +230,34 @@ pub const RULES: &[Rule] = &[
         Minor,
         "Function {} takes too many parameters",
         "Group related parameters into a struct."
+    ),
+    rule!(
+        "ndl-colour-literal",
+        Convention,
+        Major,
+        "A colour is written in the code",
+        "Take it from the theme tokens (look.palette) so every theme and contrast mode works."
+    ),
+    rule!(
+        "ndl-untranslated-string",
+        Convention,
+        Major,
+        "Interface text does not go through tr()",
+        "Write the English through tr() or trf() and add its Spanish to the SPANISH table."
+    ),
+    rule!(
+        "ndl-missing-spanish",
+        Convention,
+        Major,
+        "Text without Spanish: {}",
+        "Add the string and its translation to the sorted SPANISH table."
+    ),
+    rule!(
+        "ndl-missing-spdx",
+        Convention,
+        Minor,
+        "The file has no licence header",
+        "Start the file with // SPDX-License-Identifier: MIT OR Apache-2.0."
     ),
     rule!(
         "duplicated-block",

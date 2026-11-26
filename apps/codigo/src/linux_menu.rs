@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The Linux desktop's global menu: Código's menus (`menu.rs`) exported over D-Bus as a
 //! `com.canonical.dbusmenu` object and registered with the desktop's
 //! `com.canonical.AppMenu.Registrar`, so a top bar that shows the focused app's menus (Nodalix's)
