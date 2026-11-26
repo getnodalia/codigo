@@ -19,6 +19,7 @@ mod app;
 mod chrome;
 mod editor;
 mod explorer;
+mod file_icons;
 mod i18n;
 mod icon;
 mod layout;

@@ -499,7 +499,11 @@ fn explorer(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                 } else {
                     "file-text"
                 };
-                if let Some(i) = nodalia_theme::icons::get(glyph) {
+                let icon_rect =
+                    Rect::from_center_size(pos2(x + 24.0, rect.center().y), vec2(16.0, 16.0));
+                let marked = !row.entry.is_dir
+                    && crate::file_icons::paint(painter, look, icon_rect, &row.entry.name);
+                if let Some(i) = nodalia_theme::icons::get(glyph).filter(|_| !marked) {
                     nodalia_theme::icons::paint(
                         painter,
                         Rect::from_center_size(pos2(x + 24.0, rect.center().y), vec2(14.0, 14.0)),
@@ -797,7 +801,12 @@ fn file_tab(
         color(p.text_secondary)
     };
     let galley = ui.painter().layout_no_wrap(name.to_owned(), font, ink);
-    let width = galley.size().x + 50.0;
+    let width = galley.size().x
+        + if crate::file_icons::has(name) {
+            72.0
+        } else {
+            50.0
+        };
     let (rect, response) = ui.allocate_exact_size(vec2(width, 26.0), Sense::click());
     if selected && scroll_to {
         ui.scroll_to_rect(rect, None);
@@ -810,8 +819,18 @@ fn file_tab(
         Color32::TRANSPARENT
     };
     ui.painter().rect_filled(rect, CornerRadius::same(8), fill);
+    let marked = crate::file_icons::paint(
+        ui.painter(),
+        look,
+        Rect::from_center_size(pos2(rect.left() + 18.0, rect.center().y), vec2(16.0, 16.0)),
+        name,
+    );
+    let text_x = if marked { 32.0 } else { 10.0 };
     ui.painter().galley(
-        pos2(rect.left() + 10.0, rect.center().y - galley.size().y / 2.0),
+        pos2(
+            rect.left() + text_x,
+            rect.center().y - galley.size().y / 2.0,
+        ),
         galley,
         ink,
     );
