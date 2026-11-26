@@ -38,6 +38,15 @@ impl GitInfo {
             .get(path)
             .copied()
             .or_else(|| self.dirty_dirs.contains(path).then_some(Status::Modified))
+            // `status` lists a folder with only new files as one entry, so what is inside it is
+            // untracked too.
+            .or_else(|| {
+                path.ancestors()
+                    .skip(1)
+                    .take_while(|a| a.starts_with(&self.root))
+                    .any(|a| self.files.get(a) == Some(&Status::Untracked))
+                    .then_some(Status::Untracked)
+            })
     }
 
     pub fn changed_files(&self) -> impl Iterator<Item = (&PathBuf, &Status)> {
@@ -82,7 +91,7 @@ pub fn status(dir: &Path) -> Option<GitInfo> {
             "--porcelain=v1",
             "-z",
             "-b",
-            "--untracked-files=all",
+            "--untracked-files=normal",
         ]);
         c
     })?;
@@ -357,12 +366,21 @@ mod tests {
         sh(&["commit", "-qm", "first"]);
         std::fs::write(p.join("a.txt"), "1\nTWO\n3\n4\n").expect("edit");
         std::fs::write(p.join("new.txt"), "x").expect("new");
+        std::fs::create_dir_all(p.join("fresh/deep")).expect("fresh");
+        std::fs::write(p.join("fresh/deep/f.txt"), "x").expect("f");
 
         let g = status(p).expect("repository");
         assert_eq!(g.branch.as_deref(), Some("main"));
         let root = std::fs::canonicalize(p).expect("canonical");
         assert_eq!(g.status_of(&root.join("a.txt")), Some(Status::Modified));
         assert_eq!(g.status_of(&root.join("new.txt")), Some(Status::Untracked));
+        // A folder of only new files is one entry, and what is in it is untracked too.
+        assert_eq!(g.status_of(&root.join("fresh")), Some(Status::Untracked));
+        assert_eq!(
+            g.status_of(&root.join("fresh/deep/f.txt")),
+            Some(Status::Untracked)
+        );
+        assert_eq!(g.status_of(&root.join("fresh_not")), None);
 
         let changes = line_changes(&p.join("a.txt"));
         assert_eq!(

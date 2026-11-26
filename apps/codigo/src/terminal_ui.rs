@@ -153,9 +153,20 @@ pub fn run_task(app: &mut App, ctx: &egui::Context, kind: TaskKind) {
     start(app, ctx, spec, label, true);
 }
 
+/// Whether a task (run, build, test) is still going.
+pub fn task_running(app: &mut App) -> bool {
+    app.term
+        .tabs
+        .iter_mut()
+        .any(|t| t.task && t.term.status() == codigo_term::Status::Running)
+}
+
+/// Stop every task that is still going.
 pub fn stop(app: &mut App) {
-    if let Some(tab) = app.term.tabs.get_mut(app.term.active) {
-        tab.term.kill();
+    for tab in app.term.tabs.iter_mut().filter(|t| t.task) {
+        if tab.term.status() == codigo_term::Status::Running {
+            tab.term.kill();
+        }
     }
 }
 

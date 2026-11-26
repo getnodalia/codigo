@@ -2,7 +2,7 @@
 //! The application: its state, the commands, background work and the frame loop.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -30,6 +30,8 @@ pub enum Msg {
     Files(PathBuf, Vec<String>),
     Search(u64, Result<SearchResult, String>),
     Git(PathBuf, Option<GitInfo>),
+    /// A file's changed lines against git, for the gutter.
+    Marks(PathBuf, Vec<ws::LineChange>),
     Quality(u64, codigo_quality::Report),
 }
 
@@ -48,6 +50,7 @@ pub enum Panel {
     Explorer,
     Search,
     Quality,
+    Problems,
 }
 
 /// The find bar's state.
@@ -153,6 +156,8 @@ pub struct App {
     pub psearch: ProjectSearch,
     pub quality: QualityPanel,
     pub files: Option<(PathBuf, Arc<Vec<String>>)>,
+    /// Stops the walk that lists the folder's files when another folder is opened.
+    files_cancel: Arc<AtomicBool>,
     pub closed: Vec<PathBuf>,
     pub toasts: Vec<Toast>,
     tx: Sender<Msg>,
@@ -207,6 +212,7 @@ impl App {
             psearch: ProjectSearch::default(),
             quality: QualityPanel::default(),
             files: None,
+            files_cancel: Arc::new(AtomicBool::new(false)),
             closed: Vec::new(),
             toasts: Vec::new(),
             tx,
@@ -388,10 +394,12 @@ impl App {
             let id = self.new_id();
             match Document::open(id, &path) {
                 Ok(doc) => {
-                    let mut view = editor::View::new();
-                    view.marks = ws::line_changes(&path);
-                    self.tabs.push(Tab { doc, view });
+                    self.tabs.push(Tab {
+                        doc,
+                        view: editor::View::new(),
+                    });
                     self.active = self.tabs.len() - 1;
+                    self.load_marks(path.clone());
                 }
                 Err(e) => {
                     let name = path
@@ -465,9 +473,10 @@ impl App {
         tab.doc.tidy(trim, newline);
         match tab.doc.save() {
             Ok(()) => {
-                tab.view.marks = tab.doc.path().map(ws::line_changes).unwrap_or_default();
-                if let Some(p) = tab.doc.path() {
+                let saved = tab.doc.path().map(Path::to_path_buf);
+                if let Some(p) = &saved {
                     self.lsp.saved(p);
+                    self.load_marks(p.clone());
                 }
                 self.refresh_git();
                 true
@@ -499,7 +508,7 @@ impl App {
                 if let Some(old) = old.filter(|o| o != path) {
                     self.lsp.closed(&old);
                 }
-                tab.view.marks = ws::line_changes(path);
+                self.load_marks(path.to_path_buf());
                 self.session_dirty = true;
                 self.refresh_git();
                 true
@@ -580,13 +589,17 @@ impl App {
             self.save_settings();
         }
         self.files = None;
+        self.files_cancel.store(true, Ordering::Relaxed);
         self.psearch = ProjectSearch::default();
         self.quality
             .cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.quality = QualityPanel::default();
         self.project = Some(Project {
-            explorer: Explorer::new(root.clone()),
+            explorer: Explorer::new(root.clone(), {
+                let ctx = self.ctx.clone();
+                Arc::new(move || ctx.request_repaint())
+            }),
             root: root.clone(),
             git: None,
         });
@@ -604,6 +617,7 @@ impl App {
         self.quality = QualityPanel::default();
         self.project = None;
         self.files = None;
+        self.files_cancel.store(true, Ordering::Relaxed);
         self.session_dirty = true;
     }
 
@@ -619,13 +633,27 @@ impl App {
         });
     }
 
+    /// Read a file's changed lines from git on a worker thread: `git diff` on a big repository
+    /// takes long enough to be felt, so the window never waits for it.
+    pub fn load_marks(&self, path: PathBuf) {
+        let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+        std::thread::spawn(move || {
+            let marks = ws::line_changes(&path);
+            let _ = tx.send(Msg::Marks(path, marks));
+            ctx.request_repaint();
+        });
+    }
+
     pub fn list_files(&mut self) {
         let Some(root) = self.project.as_ref().map(|p| p.root.clone()) else {
             return;
         };
+        // A walk of the folder that was open before has nothing left to say.
+        self.files_cancel.store(true, Ordering::Relaxed);
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.files_cancel = cancel.clone();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
         std::thread::spawn(move || {
-            let cancel = AtomicBool::new(false);
             let files = ws::list_files(&root, 200_000, &cancel)
                 .into_iter()
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
@@ -705,11 +733,21 @@ impl App {
     }
 
     fn poll(&mut self) {
+        if let Some(p) = self.project.as_mut() {
+            p.explorer.poll();
+        }
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Files(root, files) => {
                     if self.project.as_ref().is_some_and(|p| p.root == root) {
                         self.files = Some((root, Arc::new(files)));
+                    }
+                }
+                Msg::Marks(path, marks) => {
+                    for tab in &mut self.tabs {
+                        if tab.doc.path() == Some(path.as_path()) {
+                            tab.view.marks = marks.clone();
+                        }
                     }
                 }
                 Msg::Git(root, info) => {
@@ -906,6 +944,10 @@ impl App {
             ZoomReset => {
                 self.settings.font_size = 14.0;
                 self.save_settings();
+            }
+            ShowProblems => {
+                self.sidebar_visible = true;
+                self.panel = Panel::Problems;
             }
             FocusEditor => self.focus_editor = true,
             FocusExplorer => {
@@ -1235,15 +1277,19 @@ impl App {
         }
         self.last_disk_check = Instant::now();
         let mut toasts = Vec::new();
+        let mut reloaded = None;
         if let Some(tab) = self.tabs.get_mut(self.active) {
             if !tab.doc.conflict && tab.doc.changed_on_disk() {
                 if tab.doc.is_dirty() {
                     tab.doc.conflict = true;
                 } else if tab.doc.reload().is_ok() {
-                    tab.view.marks = tab.doc.path().map(ws::line_changes).unwrap_or_default();
+                    reloaded = tab.doc.path().map(Path::to_path_buf);
                     toasts.push(tr("The file changed on disk and was reloaded."));
                 }
             }
+        }
+        if let Some(path) = reloaded {
+            self.load_marks(path);
         }
         for t in toasts {
             self.toast(t);

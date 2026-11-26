@@ -42,6 +42,10 @@ enum Act {
         start: usize,
         end: usize,
     },
+    OpenAt {
+        path: PathBuf,
+        line: usize,
+    },
     OpenProject(PathBuf),
     CloseProject,
     Panel(Panel),
@@ -173,6 +177,9 @@ fn apply(ctx: &egui::Context, app: &mut App, act: Act) {
             if app.open_path(&path, None, true) {
                 app.select_range(line, start, end);
             }
+        }
+        Act::OpenAt { path, line } => {
+            app.open_path(&path, Some(line), true);
         }
         Act::OpenProject(path) => {
             if path.is_dir() {
@@ -309,8 +316,8 @@ fn top_bar(
 
             // The palette, as a wide field in the middle of the bar.
             let rest = ui.available_width();
-            let width = (rest - 300.0).clamp(160.0, 460.0);
-            ui.add_space(((rest - width) / 2.0 - 120.0).max(8.0));
+            let width = (rest - 460.0).clamp(160.0, 420.0);
+            ui.add_space(((rest - width) / 2.0 - 190.0).max(8.0));
             let hint = match &app.project {
                 Some(p) => p
                     .root
@@ -325,10 +332,85 @@ fn top_bar(
                     Cmd::CommandPalette
                 }));
             }
+            ui.add_space(10.0);
+            actions(ui, app, look, acts);
         },
     );
     if ndl {
         chrome::controls(ui, bar, p, mode);
+    }
+}
+
+/// The buttons that run things: run, stop, and the panels you want one click away.
+fn actions(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
+    let p = &look.palette;
+    ui.spacing_mut().item_spacing.x = 2.0;
+    let has_project = app.project.is_some();
+    let running = crate::terminal_ui::task_running(app);
+    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+    let enabled = has_project && !running;
+    if enabled && response.hovered() {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(14), color(p.control_bg_hover));
+    }
+    if let Some(i) = nodalia_theme::icons::get("play") {
+        let ink = if enabled {
+            color(p.status_success_fg)
+        } else {
+            color(p.text_tertiary)
+        };
+        nodalia_theme::icons::paint(
+            ui.painter(),
+            Rect::from_center_size(rect.center(), vec2(15.0, 15.0)),
+            i,
+            nodalia_theme::icons::Style::bold(ink),
+        );
+    }
+    let run_hint = Cmd::RunProject
+        .shortcut()
+        .map(|s| format!("{}  ({})", tr(Cmd::RunProject.label()), shortcut_label(&s)))
+        .unwrap_or_default();
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Button, enabled, tr(Cmd::RunProject.label()))
+    });
+    if response.on_hover_text(run_hint).clicked() && enabled {
+        acts.push(Act::Run(Cmd::RunProject));
+    }
+    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+    if running && response.hovered() {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(14), color(p.control_bg_hover));
+    }
+    if let Some(i) = nodalia_theme::icons::get("stop") {
+        let ink = if running {
+            color(p.status_danger_fg)
+        } else {
+            color(p.text_tertiary)
+        };
+        nodalia_theme::icons::paint(
+            ui.painter(),
+            Rect::from_center_size(rect.center(), vec2(15.0, 15.0)),
+            i,
+            nodalia_theme::icons::Style::bold(ink),
+        );
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Button, running, tr(Cmd::StopRun.label()))
+    });
+    if response.on_hover_text(tr(Cmd::StopRun.label())).clicked() && running {
+        acts.push(Act::Run(Cmd::StopRun));
+    }
+    ui.add_space(6.0);
+    if icon_button(
+        ui,
+        look,
+        "terminal",
+        tr(Cmd::ToggleTerminal.label()),
+        app.term.open,
+    )
+    .clicked()
+    {
+        acts.push(Act::Run(Cmd::ToggleTerminal));
     }
 }
 
@@ -384,12 +466,14 @@ pub fn logo(ui: &mut Ui, size: f32) {
 fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
     ui.horizontal(|ui| {
-        for (panel, label) in [
-            (Panel::Explorer, tr("Files")),
-            (Panel::Search, tr("Search")),
-            (Panel::Quality, tr("Quality")),
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (panel, glyph, label) in [
+            (Panel::Explorer, "folder", tr("Files")),
+            (Panel::Search, "search", tr("Search")),
+            (Panel::Quality, "shield-check", tr("Quality")),
+            (Panel::Problems, "warning", tr("Problems")),
         ] {
-            if cr::tab(ui, look, label, app.panel == panel).clicked() {
+            if icon_button(ui, look, glyph, label, app.panel == panel).clicked() {
                 acts.push(Act::Panel(panel));
             }
         }
@@ -401,10 +485,27 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             }
         });
     });
+    if app.panel != Panel::Explorer {
+        ui.label(
+            RichText::new(match app.panel {
+                Panel::Explorer | Panel::Search => tr("Search"),
+                Panel::Quality => tr("Quality"),
+                Panel::Problems => tr("Problems"),
+            })
+            .strong()
+            .size(font_size::SMALL)
+            .color(color(look.palette.text_secondary)),
+        );
+    }
     ui.add_space(4.0);
     match app.panel {
         Panel::Explorer => explorer(ui, app, look, acts),
         Panel::Search => search_panel(ui, app, look, acts),
+        Panel::Problems => {
+            if let Some((path, line)) = crate::problems_ui::panel(ui, app, look) {
+                acts.push(Act::OpenAt { path, line });
+            }
+        }
         Panel::Quality => {
             if app.project.is_none() {
                 no_project(ui, app, look, acts);
@@ -495,6 +596,14 @@ fn explorer(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         });
     });
     let rows = project.explorer.rows();
+    if project.explorer.root_loading() {
+        ui.add_space(8.0);
+        ui.label(
+            RichText::new(tr("Loading…"))
+                .size(font_size::SMALL)
+                .color(color(p.text_tertiary)),
+        );
+    }
     let active_path = app
         .active_doc()
         .and_then(|d| d.path().map(std::path::Path::to_path_buf));
@@ -579,6 +688,15 @@ fn explorer(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                     FontId::proportional(font_size::BODY),
                     ink,
                 );
+                if row.loading {
+                    painter.text(
+                        pos2(rect.right() - 12.0, rect.center().y),
+                        egui::Align2::RIGHT_CENTER,
+                        "…",
+                        FontId::proportional(font_size::BODY),
+                        color(p.text_tertiary),
+                    );
+                }
                 if response.clicked() {
                     if row.entry.is_dir {
                         acts.push(Act::Toggle(row.entry.path.clone()));
@@ -1167,30 +1285,38 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
                 }
                 ui.label(small(text));
             }
+            let counts = app.lsp.totals();
+            if app.lsp.enabled() {
+                let tip = trf(
+                    "{} errors, {} warnings",
+                    &[&counts.errors.to_string(), &counts.warnings.to_string()],
+                );
+                let mut clicked = false;
+                for (text, ink) in [
+                    (format!("✕ {}", counts.errors), p.status_danger_fg),
+                    (format!("▲ {}", counts.warnings), p.status_warning_fg),
+                ] {
+                    let dim = counts.errors + counts.warnings == 0;
+                    let r = ui
+                        .add(
+                            egui::Label::new(
+                                RichText::new(text)
+                                    .size(font_size::SMALL)
+                                    .color(color(if dim { p.text_tertiary } else { ink })),
+                            )
+                            .sense(Sense::click()),
+                        )
+                        .on_hover_cursor(CursorIcon::PointingHand)
+                        .on_hover_text(tip.clone());
+                    clicked |= r.clicked();
+                }
+                if clicked {
+                    acts.push(Act::Run(Cmd::ShowProblems));
+                }
+            }
             let Some(doc) = app.active_doc() else {
                 return;
             };
-            if let Some(path) = doc.path() {
-                let counts = app.lsp.counts(path);
-                if counts.errors + counts.warnings > 0 {
-                    let tip = trf(
-                        "{} errors, {} warnings",
-                        &[&counts.errors.to_string(), &counts.warnings.to_string()],
-                    );
-                    ui.label(
-                        RichText::new(format!("✕ {}", counts.errors))
-                            .size(font_size::SMALL)
-                            .color(color(p.status_danger_fg)),
-                    )
-                    .on_hover_text(tip.clone());
-                    ui.label(
-                        RichText::new(format!("▲ {}", counts.warnings))
-                            .size(font_size::SMALL)
-                            .color(color(p.status_warning_fg)),
-                    )
-                    .on_hover_text(tip);
-                }
-            }
             if let Some(status) = app.lsp.status_for(doc.language().id) {
                 use codigo_engine::ServerState;
                 let name = status.name.to_owned();

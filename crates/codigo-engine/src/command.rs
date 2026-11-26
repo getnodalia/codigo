@@ -349,6 +349,7 @@ commands! {
     ZoomReset => ("view.zoomReset", "Reset zoom", View, ctrl(Key::Num0)),
     FocusEditor => ("view.focusEditor", "Focus editor", View, NONE),
     FocusExplorer => ("view.focusExplorer", "Focus explorer", View, ctrl_shift(Key::E)),
+    ShowProblems => ("view.problems", "Show the problems", View, ctrl_shift(Key::M)),
     ChangeLanguage => ("view.changeLanguage", "Change language mode…", View, NONE),
 
     RunProject => ("run.start", "Run the project", Run, plain(Key::F5)),

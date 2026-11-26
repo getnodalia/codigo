@@ -63,6 +63,20 @@ pub struct Counts {
     pub warnings: usize,
 }
 
+/// One diagnostic of any file, for the problems list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Problem {
+    pub path: PathBuf,
+    /// 0-based line.
+    pub line: usize,
+    pub severity: Severity,
+    pub message: String,
+    pub source: Option<String>,
+}
+
+/// The most problems the list keeps; a project with more than this has bigger worries.
+pub const MAX_PROBLEMS: usize = 1_000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QueryKind {
     Definition,
@@ -416,6 +430,44 @@ impl Hub {
         self.diagnostics.get(path).map_or(&[], Vec::as_slice)
     }
 
+    /// The errors and warnings of every file the servers reported on.
+    pub fn totals(&self) -> Counts {
+        let mut c = Counts::default();
+        for list in self.diagnostics.values() {
+            for d in list {
+                match d.severity {
+                    Severity::Error => c.errors += 1,
+                    Severity::Warning => c.warnings += 1,
+                    _ => {}
+                }
+            }
+        }
+        c
+    }
+
+    /// Errors and warnings of every file, errors first, then by file and line, cut at
+    /// [`MAX_PROBLEMS`]. Hints and notes are left out: they belong in the editor, not in a list.
+    pub fn problems(&self) -> Vec<Problem> {
+        let mut out: Vec<Problem> = self
+            .diagnostics
+            .iter()
+            .flat_map(|(path, list)| {
+                list.iter()
+                    .filter(|d| matches!(d.severity, Severity::Error | Severity::Warning))
+                    .map(move |d| Problem {
+                        path: path.clone(),
+                        line: d.range.start.line as usize,
+                        severity: d.severity,
+                        message: d.message.clone(),
+                        source: d.source.clone(),
+                    })
+            })
+            .collect();
+        out.sort_by(|a, b| (a.severity, &a.path, a.line).cmp(&(b.severity, &b.path, b.line)));
+        out.truncate(MAX_PROBLEMS);
+        out
+    }
+
     pub fn counts(&self, path: &Path) -> Counts {
         let mut c = Counts::default();
         for d in self.diagnostics(path) {
@@ -622,5 +674,45 @@ mod tests {
         assert_eq!((marks[1].line, marks[1].start, marks[1].end), (1, 4, 5));
         let c = hub.counts(&path);
         assert_eq!((c.errors, c.warnings), (2, 1));
+    }
+
+    #[test]
+    fn problems_span_every_file_errors_first_and_without_hints() {
+        let mut hub = Hub::new(true, || {});
+        let at = |l| codigo_lsp::Position {
+            line: l,
+            character: 0,
+        };
+        let diag = |l, sev, m: &str| Diagnostic {
+            range: codigo_lsp::Range {
+                start: at(l),
+                end: at(l),
+            },
+            severity: sev,
+            message: m.into(),
+            source: Some("rustc".into()),
+            code: None,
+        };
+        hub.diagnostics.insert(
+            PathBuf::from("/p/b.rs"),
+            vec![
+                diag(7, Severity::Warning, "unused"),
+                diag(2, Severity::Hint, "style"),
+            ],
+        );
+        hub.diagnostics.insert(
+            PathBuf::from("/p/a.rs"),
+            vec![
+                diag(9, Severity::Error, "late"),
+                diag(1, Severity::Error, "early"),
+                diag(3, Severity::Information, "note"),
+            ],
+        );
+        let list = hub.problems();
+        let got: Vec<_> = list.iter().map(|p| p.message.as_str()).collect();
+        assert_eq!(got, ["early", "late", "unused"]);
+        let t = hub.totals();
+        assert_eq!((t.errors, t.warnings), (2, 1));
+        assert!(Hub::new(true, || {}).problems().is_empty());
     }
 }

@@ -29,6 +29,7 @@ mod lsp_ui;
 mod menu;
 mod nodalia_ui;
 mod overlays;
+mod problems_ui;
 mod quality_ui;
 mod spanish;
 mod syntax_theme;
