@@ -1,9 +1,9 @@
 # Código
 
-Código is Nodalia's code editor: a fast, native editor for any language, drawn in the Nodalia
-Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
+Código is Nodalia's code editor and part of its Engineering suite: a fast, native editor for any
+language, drawn in the Nodalia Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
 
-> Código is at an early stage (0.4). This page describes only what runs today;
+> Código is at an early stage (0.5). This page describes only what runs today;
 > what is planned is in [ROADMAP.md](ROADMAP.md).
 
 ## What it does today
@@ -22,8 +22,16 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   (`Ctrl+Shift+M`, or a click on the counts) lists them for every file, errors first, and a click
   opens the place. It never installs a
   server for you, and the setting can be turned off in Preferences. Hover (`Ctrl+Shift+Space`),
-  completion (`Ctrl+Space`, and as you type) and go to definition (`F12`) work too; references,
-  rename and formatting are not there yet.
+  completion (`Ctrl+Space`, and as you type) and go to definition (`F12`) work too, and so do
+  find references (`Shift+F12`), rename symbol (`F2`, changing every file the server names) and format document (`Alt+Shift+F`).
+- **Snippets with places to fill in.** Type a word such as `fn` or `for` and press `Tab`: the
+  snippet opens with its placeholders, `Tab` and `Shift+Tab` move between them and every copy of a
+  repeated one changes together. Código ships snippets for its languages and reads your own from
+  `snippets.json` in its configuration folder (*Edit snippets* opens it).
+- **A minimap and a split editor.** A scaled picture of the file sits beside the editor, with the
+  part on screen, the lines changed against git and the problems marked; click or drag to scroll
+  (it can be turned off in Preferences). `Ctrl+\` splits the editor in two, to read one file
+  while editing another or to see two places of the same file.
 - **Files that open at once.** Opening a file no longer waits for anything: big files are read
   and parsed off the window, the text shows first and the colours arrive a moment later, and only
   the part of a very long line that is on screen is laid out.

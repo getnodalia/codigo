@@ -3,19 +3,20 @@
 Código aims to be an editor you can work in all day, in any language, with an AI beside you. This
 file lists what exists and what does not. Nothing under "Next" is available yet.
 
-## Exists (0.4)
+## Exists (0.5)
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, hover, completion and go to definition, a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub in the window (clone, pull requests, issues and reviews), files that open at once, Run and Debug in any project, code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion, go to definition, references, rename and format, snippets, a minimap and a split editor, the Engineering suite look (IBM Plex type and shared panels), a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub in the window (clone, pull requests, issues and reviews), files that open at once, Run and Debug in any project, code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
 1. **Language servers (LSP).** Diagnostics, hover, completion, go to definition, references, rename
    and formatting, with servers started per language from the user's PATH or settings. The
    `codigo-lsp` crate (protocol client, off-thread transport, server registry) and the engine's
-   `Hub` run: diagnostics show as underlines, tooltips and status bar counts, and hover, completion
-   and go to definition work. References, rename and formatting are still to do.
+   `Hub` run: diagnostics show as underlines, tooltips and status bar counts, and hover, completion,
+   go to definition, references, rename and formatting work. Still to do: code actions, signature
+   help, semantic tokens and inlay hints.
 2. **Run console and integrated terminal.** The pty-backed terminal panel (`codigo-term`) with
    tabs, and a run console for run, build, test and check with clickable errors, exist. Still to
    do: tasks defined per project, problem matchers for more output formats, split terminals,
@@ -39,8 +40,9 @@ restore, language server diagnostics, hover, completion and go to definition, a 
    inline review comments on a diff line.
 7. **Debugging** is in (see above); still to do: conditional breakpoints, watches that persist,
    breakpoints that follow edits, tried-and-tested Go and Python sessions, and launch
-   configurations. Also here: snippets, split editors and a minimap, with lighter parsing and a
-   memory budget for very large files.
+   configurations. Also here: a memory budget for very large files. Snippets, a split editor and a
+   minimap exist; still to do for them: more than two panes, drag a tab to split, and snippets from
+   extensions.
 8. **Distribution**: the packages exist (AppImage, .deb, .rpm, tarball, a macOS DMG with its own
    install window and a portable Windows zip); still to do: a Windows installer, the website page
    and a Nodalia Launcher entry.
