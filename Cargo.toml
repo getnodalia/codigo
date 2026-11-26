@@ -5,6 +5,7 @@ members = [
     "crates/codigo-syntax",
     "crates/codigo-workspace",
     "crates/codigo-engine",
+    "crates/codigo-lsp",
     "apps/codigo",
 ]
 
@@ -21,6 +22,7 @@ codigo-text = { path = "crates/codigo-text" }
 codigo-syntax = { path = "crates/codigo-syntax" }
 codigo-workspace = { path = "crates/codigo-workspace" }
 codigo-engine = { path = "crates/codigo-engine" }
+codigo-lsp = { path = "crates/codigo-lsp" }
 
 ropey = { version = "1.6", default-features = false, features = ["simd"] }
 unicode-segmentation = "1"

@@ -638,6 +638,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "codigo-lsp"
+version = "0.1.0-dev"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "codigo-syntax"
 version = "0.1.0-dev"
 dependencies = [
