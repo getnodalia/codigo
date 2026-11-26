@@ -7,6 +7,7 @@ members = [
     "crates/codigo-engine",
     "crates/codigo-lsp",
     "crates/codigo-dap",
+    "crates/codigo-git",
     "crates/codigo-term",
     "crates/codigo-quality",
     "crates/codigo-nodalia",
@@ -28,6 +29,7 @@ codigo-workspace = { path = "crates/codigo-workspace" }
 codigo-engine = { path = "crates/codigo-engine" }
 codigo-lsp = { path = "crates/codigo-lsp" }
 codigo-dap = { path = "crates/codigo-dap" }
+codigo-git = { path = "crates/codigo-git" }
 codigo-term = { path = "crates/codigo-term" }
 codigo-quality = { path = "crates/codigo-quality" }
 codigo-nodalia = { path = "crates/codigo-nodalia" }

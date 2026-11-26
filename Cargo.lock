@@ -667,6 +667,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codigo-git"
+version = "0.3.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "codigo-lsp"
 version = "0.3.0"
 dependencies = [
