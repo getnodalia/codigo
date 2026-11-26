@@ -16,10 +16,10 @@ restore, language server diagnostics, hover, completion and go to definition, a 
    `codigo-lsp` crate (protocol client, off-thread transport, server registry) and the engine's
    `Hub` run: diagnostics show as underlines, tooltips and status bar counts, and hover, completion
    and go to definition work. References, rename and formatting are still to do.
-2. **Run console and integrated terminal.** A pty-backed terminal panel (`codigo-term`) with tabs
-   and the project folder as its working directory, plus a run console that shows the output of
-   the program being built or run, with clickable errors that jump to the line, and tasks per
-   project.
+2. **Run console and integrated terminal.** The pty-backed terminal panel (`codigo-term`) with
+   tabs, and a run console for run, build, test and check with clickable errors, exist. Still to
+   do: tasks defined per project, problem matchers for more output formats, split terminals,
+   and keeping terminals across restarts.
 3. **Code quality and security, built in.** Direct analysis with no server to run, in the style of
    SonarQube: the language servers' diagnostics and each language's own linters (clippy and
    others), plus Código's own rules for complexity, duplication, long functions, dead code and

@@ -100,6 +100,9 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(CommandPalette),
                 None,
                 some(ToggleSidebar),
+                some(ToggleTerminal),
+                some(NewTerminal),
+                some(CloseTerminal),
                 some(ToggleWordWrap),
                 some(ToggleWhitespace),
                 None,
@@ -118,6 +121,17 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 None,
                 some(NextTab),
                 some(PreviousTab),
+            ]),
+        ),
+        (
+            tr("Run"),
+            items(&[
+                some(RunProject),
+                some(StopRun),
+                None,
+                some(BuildProject),
+                some(TestProject),
+                some(CheckProject),
             ]),
         ),
     ]

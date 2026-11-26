@@ -99,9 +99,38 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     } else {
         body
     };
-    island(ui, &look, center, "editor", |ui| {
+    let (editor_area, term_area) = if app.term.open && !app.term.tabs.is_empty() {
+        let height = app.term.height.clamp(
+            crate::terminal_ui::MIN_HEIGHT,
+            (center.height() * 0.7).max(crate::terminal_ui::MIN_HEIGHT),
+        );
+        let split = center.bottom() - height;
+        (
+            Rect::from_min_max(center.min, pos2(center.right(), split - gap)),
+            Some(Rect::from_min_max(pos2(center.left(), split), center.max)),
+        )
+    } else {
+        (center, None)
+    };
+    island(ui, &look, editor_area, "editor", |ui| {
         workspace(ui, app, &look, &mut acts)
     });
+    if let Some(term_area) = term_area {
+        island(ui, &look, term_area, "terminal", |ui| {
+            crate::terminal_ui::show(ui, app, &look)
+        });
+        let handle = Rect::from_min_max(
+            pos2(term_area.left(), term_area.top() - gap),
+            pos2(term_area.right(), term_area.top()),
+        );
+        let response = ui
+            .interact(handle, ui.scope_id().with("terminal-resize"), Sense::drag())
+            .on_hover_cursor(CursorIcon::ResizeVertical);
+        if response.dragged() {
+            app.term.height =
+                (term_area.height() - response.drag_delta().y).max(crate::terminal_ui::MIN_HEIGHT);
+        }
+    }
     status_bar(ui, status, app, &look, &mut acts);
 
     overlays::show(&ctx, app, &look);

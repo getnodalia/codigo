@@ -1,0 +1,21 @@
+[package]
+name = "codigo-term"
+description = "Código's terminal: a pty with a shell or a command running in it, and the screen it draws."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+portable-pty = "0.9"
+vt100 = "0.18"
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

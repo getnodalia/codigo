@@ -30,6 +30,7 @@ mod menu;
 mod overlays;
 mod spanish;
 mod syntax_theme;
+mod terminal_ui;
 mod ui;
 mod updates;
 mod widgets;
