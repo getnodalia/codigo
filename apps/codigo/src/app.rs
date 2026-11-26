@@ -35,6 +35,20 @@ pub enum Msg {
     Quality(u64, codigo_quality::Report),
     /// The program to debug was built and a debugger found, or why not.
     DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
+    /// A big file was read off the window thread.
+    Opened(Opening, Result<Document, OpenError>),
+}
+
+/// Files above this size are read on a worker thread; smaller ones open before the next frame.
+const OPEN_IN_BACKGROUND_BYTES: u64 = 192 * 1024;
+
+/// A file being read in the background, and what to do when it is there.
+#[derive(Clone)]
+pub struct Opening {
+    pub id: DocId,
+    pub path: PathBuf,
+    pub line: Option<usize>,
+    pub focus: bool,
 }
 
 pub struct Tab {
@@ -142,6 +156,8 @@ pub struct App {
     pub tabs: Vec<Tab>,
     pub active: usize,
     next_id: u64,
+    /// Big files being read in the background.
+    pub opening: Vec<Opening>,
     pub project: Option<Project>,
     /// Language servers and what they reported.
     pub lsp: Hub,
@@ -195,6 +211,25 @@ impl App {
         let settings = Settings::load();
         i18n::set(Lang::from_setting(&settings.language));
         let (tx, rx) = channel();
+        // Compiling a grammar's queries costs ~20 ms the first time; do it for
+        // the common languages off the UI thread so the first open is instant.
+        std::thread::spawn(|| {
+            for id in [
+                "rust",
+                "javascript",
+                "typescript",
+                "python",
+                "json",
+                "markdown",
+                "toml",
+                "html",
+                "css",
+            ] {
+                if let Some(def) = codigo_syntax::find(id) {
+                    let _ = def.grammar();
+                }
+            }
+        });
         let lsp = {
             let ctx = cc.egui_ctx.clone();
             Hub::new(settings.language_servers, move || ctx.request_repaint())
@@ -204,6 +239,7 @@ impl App {
             tabs: Vec::new(),
             active: 0,
             next_id: 1,
+            opening: Vec::new(),
             project: None,
             lsp,
             term: crate::terminal_ui::TermPanel::default(),
@@ -395,7 +431,9 @@ impl App {
         }
     }
 
-    /// Open a file in a tab, or switch to it when it is already open. `line` is 0-based.
+    /// Open a file in a tab, or switch to it when it is already open. `line` is 0-based. A big
+    /// file is read on a worker thread and gets its tab when it is ready; the return value then
+    /// only says it was started.
     pub fn open_path(&mut self, path: &Path, line: Option<usize>, focus: bool) -> bool {
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         if let Some(i) = self.tabs.iter().position(|t| {
@@ -404,29 +442,72 @@ impl App {
             })
         }) {
             self.active = i;
+        } else if self.opening.iter().any(|o| o.path == path) {
+            // Already on its way; the latest request decides where the caret goes.
+            for o in self.opening.iter_mut().filter(|o| o.path == path) {
+                o.line = line;
+                o.focus = focus;
+            }
+            return true;
         } else {
             let id = self.new_id();
-            match Document::open(id, &path) {
-                Ok(doc) => {
-                    self.tabs.push(Tab {
-                        doc,
-                        view: editor::View::new(),
+            let big = std::fs::metadata(&path).is_ok_and(|m| m.len() > OPEN_IN_BACKGROUND_BYTES);
+            if big {
+                let job = Opening {
+                    id,
+                    path: path.clone(),
+                    line,
+                    focus,
+                };
+                self.opening.push(job.clone());
+                let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+                let spawned = std::thread::Builder::new()
+                    .name("codigo-open".into())
+                    .spawn(move || {
+                        let result = Document::open(job.id, &job.path);
+                        let _ = tx.send(Msg::Opened(job, result));
+                        ctx.request_repaint();
                     });
-                    self.active = self.tabs.len() - 1;
-                    self.load_marks(path.clone());
-                }
-                Err(e) => {
-                    let name = path
-                        .file_name()
-                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                    self.toast(format!("{name}: {}", App::error_text(&e)));
+                if spawned.is_err() {
+                    self.opening.retain(|o| o.id != id);
+                    self.toast(tr("The file could not be read."));
                     return false;
                 }
+                return true;
+            }
+            match Document::open(id, &path) {
+                Ok(doc) => self.add_tab(doc),
+                Err(e) => return self.open_failed(&path, &e),
             }
         }
+        self.after_open(&path, line, focus);
+        true
+    }
+
+    fn add_tab(&mut self, doc: Document) {
+        let path = doc.path().map(Path::to_path_buf);
+        self.tabs.push(Tab {
+            doc,
+            view: editor::View::new(),
+        });
+        self.active = self.tabs.len() - 1;
+        if let Some(path) = path {
+            self.load_marks(path);
+        }
+    }
+
+    fn open_failed(&mut self, path: &Path, e: &OpenError) -> bool {
+        let name = path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        self.toast(format!("{name}: {}", App::error_text(e)));
+        false
+    }
+
+    fn after_open(&mut self, path: &Path, line: Option<usize>, focus: bool) {
         if let Some(project) = self.project.as_mut() {
             if path.starts_with(&project.root) {
-                project.explorer.reveal(&path);
+                project.explorer.reveal(path);
             }
         }
         if let Some(line) = line {
@@ -436,7 +517,31 @@ impl App {
             self.focus_editor = true;
         }
         self.session_dirty = true;
-        true
+    }
+
+    /// A file read in the background arrived.
+    fn opened(&mut self, job: Opening, result: Result<Document, OpenError>) {
+        // The latest request for the file may have changed where the caret goes.
+        let job = self
+            .opening
+            .iter()
+            .find(|o| o.id == job.id)
+            .cloned()
+            .unwrap_or(job);
+        self.opening.retain(|o| o.id != job.id);
+        let (line, focus) = (job.line, job.focus);
+        match result {
+            Ok(doc) => {
+                if self.tabs.iter().any(|t| t.doc.path() == doc.path()) {
+                    return;
+                }
+                self.add_tab(doc);
+                self.after_open(&job.path, line, focus);
+            }
+            Err(e) => {
+                self.open_failed(&job.path, &e);
+            }
+        }
     }
 
     /// Put the caret at the start of a 0-based line, selecting nothing.
@@ -758,6 +863,7 @@ impl App {
                         self.files = Some((root, Arc::new(files)));
                     }
                 }
+                Msg::Opened(job, result) => self.opened(job, result),
                 Msg::Marks(path, marks) => {
                     for tab in &mut self.tabs {
                         if tab.doc.path() == Some(path.as_path()) {

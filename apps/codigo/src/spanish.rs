@@ -159,6 +159,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Open a folder to run its tasks.", "Abre una carpeta para ejecutar sus tareas."),
     ("Open file…", "Abrir archivo…"),
     ("Open folder…", "Abrir carpeta…"),
+    ("Opening {}…", "Abriendo {}…"),
     ("Outdent", "Reducir sangría"),
     ("Output", "Salida"),
     ("Overwrite", "Sobrescribir"),

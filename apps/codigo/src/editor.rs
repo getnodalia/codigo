@@ -11,6 +11,9 @@ use codigo_syntax::Span;
 use codigo_text::search::Matcher;
 use codigo_text::{Buffer, IndentRules, Motion, Pairs};
 use codigo_workspace::{LineChange, LineChangeKind};
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use egui::{
     pos2, vec2, Align2, Color32, CornerRadius, Event, EventFilter, FontId, Id, Key, Modifiers,
     PointerButton, Rect, Sense, Stroke, StrokeKind, Ui,
@@ -82,7 +85,29 @@ struct Cache {
     /// without word wrap.
     first_row: Vec<u32>,
     max_cols: usize,
+    /// The last very long line that was laid out, which would otherwise be laid out again every
+    /// frame (a minified bundle is one line of megabytes).
+    long: RefCell<Option<LongLine>>,
+    /// Progress of the scan for the widest line: the text it is for, how many lines are done,
+    /// and the widest so far.
+    scan_revision: Option<(u64, usize)>,
+    scanned: usize,
+    scan_max: usize,
 }
+
+/// How long one frame may spend looking for the widest line of a big file.
+const SCAN_BUDGET: std::time::Duration = std::time::Duration::from_millis(5);
+
+struct LongLine {
+    revision: u64,
+    line: usize,
+    wrap_cols: usize,
+    tab: usize,
+    laid: Rc<Laid>,
+}
+
+/// Lines with more characters than this are kept laid out between frames.
+const LONG_LINE_CHARS: usize = 2_000;
 
 /// What the editor asks the app to do.
 #[derive(Default)]
@@ -125,7 +150,9 @@ struct Metrics {
     cols: usize,
 }
 
-fn cache_for(doc: &Document, cache: &mut Cache, cols: usize, wrap: bool) {
+/// Work out the row layout. Without word wrap this only finds the widest line, which on a huge
+/// file is spread over several frames; the result says whether it is finished.
+fn cache_for(doc: &Document, cache: &mut Cache, cols: usize, wrap: bool) -> bool {
     let buffer = doc.buffer();
     let tab = buffer.tab_width.max(1);
     let wrap_cols = if wrap { cols } else { 0 };
@@ -134,50 +161,73 @@ fn cache_for(doc: &Document, cache: &mut Cache, cols: usize, wrap: bool) {
         && cache.tab == tab
         && cache.wrap_cols == wrap_cols
     {
-        return;
+        return true;
     }
     let rope = buffer.rope();
     let lines = rope.len_lines();
-    let mut max_cols = 0usize;
-    let mut first_row = Vec::new();
-    if wrap {
-        first_row.reserve(lines + 1);
+    if !wrap {
+        // Start over when the text or the tab width changed; the old width stays as a lower
+        // bound meanwhile so the scroll area does not jump.
+        if cache.scan_revision != Some((buffer.revision(), tab)) {
+            cache.scan_revision = Some((buffer.revision(), tab));
+            cache.scanned = 0;
+            cache.scan_max = 0;
+        }
+        let started = std::time::Instant::now();
+        let mut line = cache.scanned;
+        let mut max_cols = cache.scan_max;
+        for text in rope.lines_at(line) {
+            let chars = text.len_chars();
+            // Cheap bound first: a line can be at most `max(2, tab)` cells per character.
+            if chars.saturating_mul(tab.max(2)) > max_cols {
+                let text = text.to_string();
+                max_cols = max_cols.max(layout::width_of(text.trim_end_matches(['\n', '\r']), tab));
+            }
+            line += 1;
+            if line.is_multiple_of(2048) && started.elapsed() > SCAN_BUDGET {
+                break;
+            }
+        }
+        cache.scanned = line;
+        cache.scan_max = max_cols;
+        cache.max_cols = cache.max_cols.max(max_cols);
+        cache.wrap_cols = 0;
+        cache.first_row = Vec::new();
+        if line < lines {
+            return false;
+        }
+        cache.max_cols = max_cols;
+        cache.revision = buffer.revision();
+        cache.tab = tab;
+        cache.valid = true;
+        return true;
     }
+    let mut max_cols = 0usize;
+    let mut first_row = Vec::with_capacity(lines + 1);
     let mut rows = 0u32;
     for l in 0..lines {
         let line = rope.line(l);
-        let chars = line.len_chars();
-        // Cheap bound first: a line can be at most `max(2, tab)` cells per character.
-        let bound = chars.saturating_mul(tab.max(2));
-        let needs_width = bound > max_cols || wrap;
-        let mut width = 0usize;
-        if needs_width {
-            let text = line.to_string();
-            width = layout::width_of(text.trim_end_matches(['\n', '\r']), tab);
-            max_cols = max_cols.max(width);
-        }
-        if wrap {
-            first_row.push(rows);
-            let count = if width <= cols.max(2) {
-                1
-            } else {
-                let text = line.to_string();
-                let text = text.trim_end_matches(['\n', '\r']);
-                let cells = cells_of(text, tab);
-                layout::wrap(text, &cells, cols).len() as u32
-            };
-            rows = rows.saturating_add(count);
-        }
-    }
-    if wrap {
+        let text = line.to_string();
+        let width = layout::width_of(text.trim_end_matches(['\n', '\r']), tab);
+        max_cols = max_cols.max(width);
         first_row.push(rows);
+        let count = if width <= cols.max(2) {
+            1
+        } else {
+            let text = text.trim_end_matches(['\n', '\r']);
+            let cells = cells_of(text, tab);
+            layout::wrap(text, &cells, cols).len() as u32
+        };
+        rows = rows.saturating_add(count);
     }
+    first_row.push(rows);
     cache.revision = buffer.revision();
     cache.tab = tab;
     cache.wrap_cols = wrap_cols;
     cache.valid = true;
     cache.first_row = first_row;
     cache.max_cols = max_cols;
+    true
 }
 
 fn total_rows(cache: &Cache, lines: usize) -> usize {
@@ -211,6 +261,8 @@ struct Laid {
     text: String,
     cells: Vec<u32>,
     rows: Vec<(usize, usize)>,
+    /// The byte offset of each character, and one more for the end.
+    bytes: Vec<usize>,
 }
 
 fn lay(buffer: &Buffer, line: usize, wrap_cols: usize) -> Laid {
@@ -221,7 +273,36 @@ fn lay(buffer: &Buffer, line: usize, wrap_cols: usize) -> Laid {
     } else {
         vec![(0, cells.len().saturating_sub(1))]
     };
-    Laid { text, cells, rows }
+    let bytes = byte_of_chars(&text);
+    Laid {
+        text,
+        cells,
+        rows,
+        bytes,
+    }
+}
+
+/// [`lay`], remembering the result for lines long enough that doing it every frame hurts.
+fn lay_cached(cache: &Cache, buffer: &Buffer, line: usize, wrap_cols: usize) -> Rc<Laid> {
+    let chars = buffer.rope().get_line(line).map_or(0, |l| l.len_chars());
+    if chars < LONG_LINE_CHARS {
+        return Rc::new(lay(buffer, line, wrap_cols));
+    }
+    let (revision, tab) = (buffer.revision(), buffer.tab_width.max(1));
+    if let Some(l) = &*cache.long.borrow() {
+        if l.revision == revision && l.line == line && l.wrap_cols == wrap_cols && l.tab == tab {
+            return l.laid.clone();
+        }
+    }
+    let laid = Rc::new(lay(buffer, line, wrap_cols));
+    *cache.long.borrow_mut() = Some(LongLine {
+        revision,
+        line,
+        wrap_cols,
+        tab,
+        laid: laid.clone(),
+    });
+    laid
 }
 
 /// The row of a line that holds the character `col`.
@@ -304,8 +385,14 @@ pub fn show(
         handle_keys(ui, doc, view, opts, &mut out);
     }
 
-    doc.ensure_parsed();
-    cache_for(doc, &mut view.cache, m.cols, wrap);
+    if doc.ensure_parsed() {
+        // The colours of a big file are still being worked out: draw again as soon as they are.
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(16));
+    }
+    if !cache_for(doc, &mut view.cache, m.cols, wrap) {
+        ui.ctx().request_repaint();
+    }
     let wrap_cols = if wrap { m.cols } else { 0 };
     let rows_total = total_rows(&view.cache, doc.buffer().line_count());
 
@@ -387,10 +474,10 @@ pub fn show(
             let mut gutter_items: Vec<(f32, usize, bool)> = Vec::new();
 
             for line in first_line..last_line {
-                let laid = lay(buffer, line, wrap_cols);
+                let laid = lay_cached(&view.cache, buffer, line, wrap_cols);
                 let line_start = buffer.line_start(line);
                 let chars = laid.cells.len().saturating_sub(1);
-                let bytes = byte_of_chars(&laid.text);
+                let bytes = &laid.bytes;
                 let line_spans: &[Span] = spans
                     .get(line - first_line)
                     .map_or(&[][..], |s| s.as_slice());
@@ -503,7 +590,7 @@ pub fn show(
                         &m,
                         opts,
                         &laid,
-                        &bytes,
+                        bytes,
                         line_spans,
                         a,
                         b,
@@ -633,7 +720,7 @@ pub fn show(
                 let buffer = doc.buffer();
                 let head = buffer.primary().head;
                 let line = buffer.line_of(head);
-                let laid = lay(buffer, line, wrap_cols);
+                let laid = lay_cached(&view.cache, buffer, line, wrap_cols);
                 let c = head.saturating_sub(buffer.line_start(line));
                 let row = first_row_of(&view.cache, line) + row_holding(&laid.rows, c);
                 let y = origin.y + row as f32 * m.row_h;
@@ -776,11 +863,23 @@ fn paint_row(
             );
         }
     };
-    let letters: Vec<char> = laid.text.chars().collect();
-    for i in a..b {
-        let Some(c) = letters.get(i).copied() else {
-            break;
-        };
+    // Only the characters near the screen: a minified line is megabytes long.
+    let row_cells = laid
+        .cells
+        .get(a..b.min(laid.cells.len()))
+        .unwrap_or_default();
+    let first = a + row_cells
+        .partition_point(|c| i64::from(*c) < i64::from(base_cell) + col_lo)
+        .saturating_sub(1);
+    let last =
+        (a + row_cells.partition_point(|c| i64::from(*c) <= i64::from(base_cell) + col_hi) + 1)
+            .min(b);
+    let window = match (bytes.get(first), bytes.get(last)) {
+        (Some(from), Some(to)) => laid.text.get(*from..*to).unwrap_or_default(),
+        _ => "",
+    };
+    for (k, c) in window.chars().enumerate() {
+        let i = first + k;
         let cell = laid
             .cells
             .get(i)
@@ -940,7 +1039,7 @@ fn char_at_point(
         return buffer.len_chars();
     }
     let line = line_of_row(&view.cache, lines, row);
-    let laid = lay(buffer, line, wrap_cols);
+    let laid = lay_cached(&view.cache, buffer, line, wrap_cols);
     let ri = (row - first_row_of(&view.cache, line)).min(laid.rows.len().saturating_sub(1));
     let (a, b) = laid.rows.get(ri).copied().unwrap_or((0, 0));
     let col = (pos.x - text_x) / m.cw;

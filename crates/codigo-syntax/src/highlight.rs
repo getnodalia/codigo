@@ -2,6 +2,7 @@
 //! A syntax tree that follows a buffer as it is edited, and the coloured spans it yields.
 
 use std::ops::Range;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use codigo_text::Change;
 use ropey::Rope;
@@ -15,6 +16,13 @@ use crate::scope::Scope;
 /// colour than to read.
 pub const MAX_HIGHLIGHT_LINE_BYTES: usize = 20_000;
 
+/// Texts at least this long are parsed on a worker thread, so that opening or editing a big
+/// file never holds up the window. Smaller ones take a few milliseconds and are parsed in place.
+pub const BACKGROUND_PARSE_BYTES: usize = 48 * 1024;
+
+/// Texts longer than this are not parsed at all.
+pub const MAX_PARSE_BYTES: usize = 24 * 1024 * 1024;
+
 /// A coloured run inside one line. `start` and `end` are byte offsets from the line's first byte.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Span {
@@ -27,11 +35,18 @@ pub struct Span {
 pub struct Syntax {
     def: &'static LanguageDef,
     grammar: &'static Grammar,
-    parser: Parser,
+    /// `None` while a worker thread holds it.
+    parser: Option<Parser>,
     tree: Option<Tree>,
     cursor: QueryCursor,
     /// Edits applied to `tree` since it was last parsed against the text.
     stale: bool,
+    /// A parse running on a worker thread.
+    job: Option<Receiver<(Parser, Option<Tree>)>>,
+    /// Edits made while that parse was running; the tree it returns knows nothing of them.
+    missed: Vec<InputEdit>,
+    /// The running parse is of a text that has since been replaced.
+    discard: bool,
 }
 
 impl Syntax {
@@ -43,10 +58,13 @@ impl Syntax {
         Some(Self {
             def,
             grammar,
-            parser,
+            parser: Some(parser),
             tree: None,
             cursor: QueryCursor::new(),
             stale: true,
+            job: None,
+            missed: Vec::new(),
+            discard: false,
         })
     }
 
@@ -58,42 +76,129 @@ impl Syntax {
     ///
     /// [`reparse`]: Syntax::reparse
     pub fn edit(&mut self, changes: &[Change]) {
-        let Some(tree) = self.tree.as_mut() else {
-            return;
-        };
-        for c in changes {
-            tree.edit(&InputEdit {
+        let edits: Vec<InputEdit> = changes
+            .iter()
+            .map(|c| InputEdit {
                 start_byte: c.start_byte,
                 old_end_byte: c.old_end_byte,
                 new_end_byte: c.new_end_byte,
                 start_position: point(c.start_point),
                 old_end_position: point(c.old_end_point),
                 new_end_position: point(c.new_end_point),
-            });
+            })
+            .collect();
+        if self.job.is_some() {
+            self.missed.extend(edits.iter().copied());
+        }
+        if let Some(tree) = self.tree.as_mut() {
+            for e in &edits {
+                tree.edit(e);
+            }
         }
         self.stale = true;
     }
 
-    /// Parse `rope`, reusing what the tree still knows.
+    /// Parse `rope` now, reusing what the tree still knows. Waits for a parse that is already
+    /// running on a worker thread.
     pub fn reparse(&mut self, rope: &Rope) {
-        let len = rope.len_bytes();
-        let mut read = |byte: usize, _: Point| -> &[u8] {
-            if byte >= len {
-                return &[];
+        if let Some(job) = self.job.take() {
+            if let Ok((parser, tree)) = job.recv() {
+                self.parser = Some(parser);
+                self.tree = tree;
             }
-            let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-            chunk.as_bytes().get(byte - start..).unwrap_or(&[])
+            self.missed.clear();
+            self.discard = false;
+        }
+        let Some(parser) = self.parser.as_mut() else {
+            return;
         };
-        self.tree = self
-            .parser
-            .parse_with_options(&mut read, self.tree.as_ref(), None);
+        self.tree = parse(parser, rope, self.tree.as_ref());
         self.stale = false;
+    }
+
+    /// Bring the tree up to date without ever waiting: short texts are parsed in place, long
+    /// ones on a worker thread whose result is picked up by a later call. Returns true while
+    /// the tree is behind the text, so the caller knows to ask again soon.
+    pub fn refresh(&mut self, rope: &Rope) -> bool {
+        if let Some(job) = &self.job {
+            match job.try_recv() {
+                Ok((parser, mut tree)) => {
+                    self.job = None;
+                    self.parser = Some(parser);
+                    if std::mem::take(&mut self.discard) {
+                        // The text was replaced while this parse ran: it describes the old one.
+                        self.missed.clear();
+                        self.tree = None;
+                        self.stale = true;
+                    } else {
+                        if let Some(t) = tree.as_mut() {
+                            for e in self.missed.drain(..) {
+                                t.edit(&e);
+                            }
+                        }
+                        self.missed.clear();
+                        self.tree = tree;
+                        // Whatever was typed meanwhile (`stale` stays set by `edit`) is parsed next.
+                    }
+                }
+                Err(TryRecvError::Empty) => return true,
+                Err(TryRecvError::Disconnected) => {
+                    self.job = None;
+                    self.missed.clear();
+                    self.stale = false;
+                    return false;
+                }
+            }
+        }
+        if !self.stale {
+            return false;
+        }
+        if rope.len_bytes() > MAX_PARSE_BYTES {
+            self.tree = None;
+            self.stale = false;
+            return false;
+        }
+        if rope.len_bytes() < BACKGROUND_PARSE_BYTES {
+            self.reparse(rope);
+            return false;
+        }
+        let Some(mut parser) = self.parser.take() else {
+            return false;
+        };
+        let old = self.tree.clone();
+        let rope = rope.clone();
+        let (tx, rx) = mpsc::channel();
+        self.missed.clear();
+        let spawned = std::thread::Builder::new()
+            .name("codigo-parse".into())
+            .spawn(move || {
+                let tree = parse(&mut parser, &rope, old.as_ref());
+                let _ = tx.send((parser, tree));
+            });
+        match spawned {
+            Ok(_) => {
+                self.job = Some(rx);
+                // Edits made from now on are replayed on the result.
+                self.stale = false;
+                true
+            }
+            Err(_) => {
+                self.stale = false;
+                false
+            }
+        }
+    }
+
+    /// True while a worker thread is parsing.
+    pub fn is_parsing(&self) -> bool {
+        self.job.is_some()
     }
 
     /// Drop the tree, for a text that was replaced wholesale.
     pub fn reset(&mut self) {
         self.tree = None;
         self.stale = true;
+        self.discard = self.job.is_some();
     }
 
     /// True when the text changed since the last [`reparse`](Syntax::reparse).
@@ -124,33 +229,49 @@ impl Syntax {
         if out.is_empty() {
             return out;
         }
-        let first_byte = rope.line_to_byte(start_line);
-        let last_byte = if end_line >= rope.len_lines() {
-            rope.len_bytes()
-        } else {
-            rope.line_to_byte(end_line)
+        let byte_of = |line: usize| {
+            if line >= rope.len_lines() {
+                rope.len_bytes()
+            } else {
+                rope.line_to_byte(line)
+            }
         };
 
-        // Collect every capture overlapping the range, then paint them in pattern order so that
+        // Collect every capture overlapping the lines, then paint them in pattern order so that
         // a pattern written later in the query wins, the way grammars' own queries assume.
+        // Lines too long to colour are left out of the query altogether: asking for the
+        // captures of a minified bundle costs more than everything else on screen.
         let mut found: Vec<(usize, usize, usize, Scope)> = Vec::new();
-        self.cursor.set_byte_range(first_byte..last_byte);
-        let source = RopeText { rope };
-        let mut captures = self
-            .cursor
-            .captures(&self.grammar.query, tree.root_node(), source);
-        while let Some((m, index)) = captures.next() {
-            let Some(capture) = m.captures().get(*index) else {
-                continue;
-            };
-            let Some(Some(scope)) = self.grammar.scopes.get(capture.index as usize) else {
-                continue;
-            };
-            let node = capture.node;
-            if node.end_byte() <= first_byte || node.start_byte() >= last_byte {
+        let mut at = start_line;
+        while at < end_line {
+            let width = |line: usize| byte_of(line + 1).saturating_sub(byte_of(line));
+            if width(at) > MAX_HIGHLIGHT_LINE_BYTES {
+                at += 1;
                 continue;
             }
-            found.push((m.pattern_index, node.start_byte(), node.end_byte(), *scope));
+            let mut to = at + 1;
+            while to < end_line && width(to) <= MAX_HIGHLIGHT_LINE_BYTES {
+                to += 1;
+            }
+            let (lo, hi) = (byte_of(at), byte_of(to));
+            self.cursor.set_byte_range(lo..hi);
+            let mut captures =
+                self.cursor
+                    .captures(&self.grammar.query, tree.root_node(), RopeText { rope });
+            while let Some((m, index)) = captures.next() {
+                let Some(capture) = m.captures().get(*index) else {
+                    continue;
+                };
+                let Some(Some(scope)) = self.grammar.scopes.get(capture.index as usize) else {
+                    continue;
+                };
+                let node = capture.node;
+                if node.end_byte() <= lo || node.start_byte() >= hi {
+                    continue;
+                }
+                found.push((m.pattern_index, node.start_byte(), node.end_byte(), *scope));
+            }
+            at = to;
         }
         found.sort_by_key(|f| f.0);
 
@@ -195,6 +316,18 @@ impl Syntax {
             .named_descendant_for_byte_range(bytes.start, bytes.end)
             .map(|n| n.kind().to_string())
     }
+}
+
+fn parse(parser: &mut Parser, rope: &Rope, old: Option<&Tree>) -> Option<Tree> {
+    let len = rope.len_bytes();
+    let mut read = |byte: usize, _: Point| -> &[u8] {
+        if byte >= len {
+            return &[];
+        }
+        let (chunk, start, _, _) = rope.chunk_at_byte(byte);
+        chunk.as_bytes().get(byte - start..).unwrap_or(&[])
+    };
+    parser.parse_with_options(&mut read, old, None)
 }
 
 fn point((row, column): (usize, usize)) -> Point {
@@ -456,5 +589,68 @@ mod tests {
         s.edit(&changes);
         s.reparse(buf.rope());
         assert_eq!(s.node_kind_at(3..8), Some("identifier".to_string()));
+    }
+
+    fn big_rust(lines: usize) -> String {
+        (0..lines)
+            .map(|i| format!("pub fn f{i}(x: u32) -> u32 {{ x + {i} }}\n"))
+            .collect()
+    }
+
+    fn settle(s: &mut Syntax, rope: &Rope) {
+        for _ in 0..2000 {
+            if !s.refresh(rope) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        panic!("the parse never finished");
+    }
+
+    #[test]
+    fn a_big_text_is_parsed_on_a_worker_without_waiting() {
+        let text = big_rust(6000);
+        assert!(text.len() > BACKGROUND_PARSE_BYTES);
+        let mut s = Syntax::new(find("rust").expect("rust")).expect("grammar");
+        let rope = Rope::from_str(&text);
+        assert!(s.refresh(&rope), "the first call only starts the parse");
+        assert!(s.is_parsing());
+        assert!(s.tree().is_none());
+        settle(&mut s, &rope);
+        assert!(!s.is_parsing());
+        let spans = s.spans(&rope, 0..2);
+        assert!(spans[0].iter().any(|sp| sp.scope == Scope::Keyword));
+    }
+
+    #[test]
+    fn edits_made_while_a_parse_runs_are_not_lost() {
+        let text = big_rust(6000);
+        let mut buffer = Buffer::from_text(&text);
+        let mut s = Syntax::new(find("rust").expect("rust")).expect("grammar");
+        assert!(s.refresh(buffer.rope()));
+        // Type at the top while the worker is busy.
+        buffer.set_cursor(0);
+        let changes = buffer.insert_text("// typed\n");
+        s.edit(&changes);
+        settle(&mut s, buffer.rope());
+        let rope = buffer.rope().clone();
+        let spans = s.spans(&rope, 0..2);
+        assert!(
+            spans[0].iter().any(|sp| sp.scope == Scope::Comment),
+            "the line typed meanwhile is a comment: {spans:?}"
+        );
+        assert!(spans[1].iter().any(|sp| sp.scope == Scope::Keyword));
+    }
+
+    #[test]
+    fn a_minified_line_costs_nothing_and_does_not_hide_the_others() {
+        let mut text = String::from("fn a() {}\n");
+        text.push_str(&"let x = 1; ".repeat(10_000));
+        text.push_str("\nfn b() {}\n");
+        let (mut s, rope) = syntax("rust", &text);
+        let spans = s.spans(&rope, 0..3);
+        assert!(spans[1].is_empty());
+        assert!(spans[0].iter().any(|sp| sp.scope == Scope::Keyword));
+        assert!(spans[2].iter().any(|sp| sp.scope == Scope::Keyword));
     }
 }
