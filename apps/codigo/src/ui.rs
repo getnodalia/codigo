@@ -284,6 +284,7 @@ fn top_bar(
                     (tr("Open folder…"), Cmd::OpenFolder),
                     (tr("Open file…"), Cmd::OpenFile),
                     (tr("New file"), Cmd::NewFile),
+                    (tr("Clone repository…"), Cmd::CloneRepository),
                 ] {
                     if ui.button(label).clicked() {
                         acts.push(Act::Run(cmd));
@@ -1254,7 +1255,7 @@ fn welcome(ui: &mut Ui, app: &App, look: &Look, acts: &mut Vec<Act>) {
             );
             ui.add_space(14.0);
             ui.horizontal(|ui| {
-                let total = 120.0 + 100.0 + 120.0 + 16.0;
+                let total = 120.0 + 100.0 + 120.0 + 150.0 + 24.0;
                 ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
                 if cr::primary_button_min(ui, look, tr("Open folder…"), true, 120.0).clicked() {
                     acts.push(Act::Run(Cmd::OpenFolder));
@@ -1264,6 +1265,11 @@ fn welcome(ui: &mut Ui, app: &App, look: &Look, acts: &mut Vec<Act>) {
                 }
                 if cr::secondary_button_min(ui, look, tr("New file"), true, 120.0).clicked() {
                     acts.push(Act::Run(Cmd::NewFile));
+                }
+                if cr::secondary_button_min(ui, look, tr("Clone repository…"), true, 150.0)
+                    .clicked()
+                {
+                    acts.push(Act::Run(Cmd::CloneRepository));
                 }
             });
             if !app.settings.recent_projects.is_empty() {

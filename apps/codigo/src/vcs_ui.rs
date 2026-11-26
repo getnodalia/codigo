@@ -543,23 +543,25 @@ fn toolbar(ui: &mut Ui, app: &mut App, look: &Look, status: &RepoStatus) {
 }
 
 fn commit_box(ui: &mut Ui, app: &mut App, look: &Look, status: &RepoStatus) {
-    let response = cr::field_frame(look)
+    let id = egui::Id::unique("git-commit-message");
+    // Taken before the field sees the key, which would otherwise swallow Ctrl+Enter.
+    let ctrl_enter = ui.memory(|m| m.has_focus(id))
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+    cr::field_frame(look)
         .inner_margin(egui::Margin::symmetric(8, 6))
         .show(ui, |ui| {
             ui.add(
                 egui::TextEdit::multiline(&mut app.vcs.message)
+                    .id(id)
                     .frame(egui::Frame::NONE)
                     .hint_text(tr("Message"))
                     .desired_rows(3)
                     .desired_width(f32::INFINITY)
                     .font(FontId::proportional(font_size::BODY)),
             )
-        })
-        .inner;
+        });
     let staged = status.staged().count();
     let ready = staged > 0 && !app.vcs.message.trim().is_empty() && app.vcs.busy.is_none();
-    let ctrl_enter = response.has_focus()
-        && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         let label = if staged > 0 {

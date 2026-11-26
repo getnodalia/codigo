@@ -3,11 +3,11 @@
 Código aims to be an editor you can work in all day, in any language, with an AI beside you. This
 file lists what exists and what does not. Nothing under "Next" is available yet.
 
-## Exists (0.3)
+## Exists (0.4)
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, hover, completion and go to definition, a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion and go to definition, a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub in the window (clone, pull requests, issues and reviews), files that open at once, Run and Debug in any project, code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
@@ -33,7 +33,10 @@ restore, language server diagnostics, hover, completion and go to definition, a 
 5. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`
    crate, with the provider chosen by the user and keys kept in the system keyring. Nothing leaves
    the computer without being asked. Review of a change for quality and security comes with it.
-6. **Git in the editor.** Changes view, diff gutter, stage, commit and branch switching.
+6. **Git in the editor** is in (changes, diffs, stage, commit, branches, push and pull, and
+   GitHub pull requests, issues and cloning); still to do: partial staging by hunk, merge
+   conflict resolution, stash, blame in the gutter, creating a pull request from Código and
+   inline review comments on a diff line.
 7. **Debugging** is in (see above); still to do: conditional breakpoints, watches that persist,
    breakpoints that follow edits, tried-and-tested Go and Python sessions, and launch
    configurations. Also here: snippets, split editors and a minimap, with lighter parsing and a

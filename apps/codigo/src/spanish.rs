@@ -58,6 +58,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Clone", "Clonar"),
     ("Clone a repository", "Clonar un repositorio"),
     ("Clone a repository…", "Clonar un repositorio…"),
+    ("Clone repository…", "Clonar repositorio…"),
     ("Cloned. The project is open.", "Clonado. El proyecto está abierto."),
     ("Cloning…", "Clonando…"),
     ("Close", "Cerrar"),

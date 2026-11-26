@@ -1397,6 +1397,8 @@ impl App {
                         | Cmd::Outdent
                         | Cmd::MoveLineUp
                         | Cmd::MoveLineDown
+                        | Cmd::OpenLineBelow
+                        | Cmd::OpenLineAbove
                         | Cmd::CollapseSelections
                 );
                 if text_focus && text_only {
