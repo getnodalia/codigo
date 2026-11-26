@@ -81,6 +81,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(TriggerCompletion),
                 some(RenameSymbol),
                 some(FormatDocument),
+                some(EditSnippets),
             ]),
         ),
         (

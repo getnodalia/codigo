@@ -330,6 +330,7 @@ commands! {
     JoinLines => ("edit.joinLines", "Join lines", Edit, ctrl(Key::J)),
     RenameSymbol => ("edit.renameSymbol", "Rename symbol…", Edit, plain(Key::F2)),
     FormatDocument => ("edit.formatDocument", "Format document", Edit, alt_shift(Key::F)),
+    EditSnippets => ("edit.snippets", "Edit user snippets", Edit, NONE),
     TriggerCompletion => ("edit.complete", "Suggest completions", Edit, ctrl(Key::Space)),
     OpenLineBelow => ("edit.openLineBelow", "Insert line below", Edit, ctrl(Key::Enter)),
     OpenLineAbove => ("edit.openLineAbove", "Insert line above", Edit, Some(Shortcut::new(true, true, false, Key::Enter))),

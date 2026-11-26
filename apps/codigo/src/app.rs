@@ -181,6 +181,8 @@ pub struct App {
     pub query: Option<crate::lsp_ui::InFlight>,
     /// The hover or completion popup next to the caret.
     pub popup: crate::lsp_ui::Popup,
+    /// Snippets: the person's own, and the one being filled in.
+    pub snippets: crate::snippets_ui::State,
     pub panel: Panel,
     pub sidebar_visible: bool,
     pub sidebar_width: f32,
@@ -260,6 +262,7 @@ impl App {
             gh: crate::github_ui::GithubPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
+            snippets: crate::snippets_ui::State::new(),
             panel: Panel::Explorer,
             sidebar_visible: true,
             sidebar_width: 280.0,
@@ -1123,6 +1126,7 @@ impl App {
             GoToDefinition => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Definition, false),
             FindReferences => crate::lsp_ui::ask(self, codigo_engine::QueryKind::References, false),
             RenameSymbol => crate::lsp_ui::open_rename(self),
+            EditSnippets => crate::snippets_ui::open_user_file(self),
             FormatDocument => crate::lsp_ui::format_document(self),
             ShowHover => crate::lsp_ui::ask(self, codigo_engine::QueryKind::Hover, false),
             TriggerCompletion => {
@@ -1524,6 +1528,7 @@ impl App {
             self.last_edit = Some(Instant::now());
         }
         crate::lsp_ui::update(self, out.edited);
+        crate::snippets_ui::update(self);
         if let Some(line) = out.gutter_click {
             if let Some(path) = self
                 .tabs
@@ -1652,6 +1657,7 @@ impl eframe::App for App {
             ctx.memory(|m| m.has_focus(egui::Id::unique(("codigo-editor", t.doc.id().0))))
         });
         crate::lsp_ui::keys(self, &ctx);
+        crate::snippets_ui::keys(self, &ctx, editor_focus);
         crate::terminal_ui::input(self, &ctx);
         self.shortcuts(&ctx, editor_focus);
         self.refresh_find();

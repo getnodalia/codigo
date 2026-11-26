@@ -20,6 +20,7 @@ pub mod lsp;
 pub mod paths;
 pub mod session;
 pub mod settings;
+pub mod snippets;
 pub mod tasks;
 
 pub use codigo_lsp::CompletionItem;
