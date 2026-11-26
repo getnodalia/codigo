@@ -108,6 +108,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 some(CloseTerminal),
                 some(ShowProblems),
                 some(ShowDebug),
+                some(ToggleSplit),
                 some(ToggleWordWrap),
                 some(ToggleWhitespace),
                 some(ToggleMinimap),

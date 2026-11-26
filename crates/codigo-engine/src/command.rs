@@ -351,6 +351,7 @@ commands! {
     CloseTerminal => ("terminal.close", "Close the terminal", View, NONE),
     ToggleWordWrap => ("view.toggleWordWrap", "Word wrap", View, alt(Key::Z)),
     ToggleWhitespace => ("view.toggleWhitespace", "Show whitespace", View, NONE),
+    ToggleSplit => ("view.toggleSplit", "Split the editor", View, ctrl(Key::Backslash)),
     ToggleMinimap => ("view.toggleMinimap", "Show minimap", View, NONE),
     ZoomIn => ("view.zoomIn", "Zoom in", View, ctrl(Key::Plus)),
     ZoomOut => ("view.zoomOut", "Zoom out", View, ctrl(Key::Minus)),

@@ -64,6 +64,8 @@ pub struct View {
     pub diagnostics: Vec<Mark>,
     /// The hub generation and document revision `diagnostics` was built for.
     pub diagnostics_key: Option<(u64, u64)>,
+    /// 0 for the editor's own view of a file, 1 for the second view of the same file in a split.
+    pub pane: u8,
     /// How far the text is scrolled, in points, as of the last frame.
     scroll_y: f32,
     /// Scroll here on the next frame (the minimap was clicked).
@@ -329,6 +331,11 @@ fn byte_of_chars(text: &str) -> Vec<usize> {
     out
 }
 
+/// The id of the text widget showing `doc` in `pane`, to ask whether it has the keyboard.
+pub fn editor_id(doc: u64, pane: u8) -> Id {
+    Id::unique(("codigo-editor", doc, pane))
+}
+
 /// The editor, with the minimap beside it when it is on.
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -482,7 +489,7 @@ fn minimap(ui: &mut Ui, doc: &Document, view: &mut View, strip: Rect, look: &Loo
     // Click or drag to scroll: the point under the pointer becomes the middle of the screen.
     let response = ui.interact(
         strip,
-        Id::unique(("codigo-minimap", doc.id().0)),
+        Id::unique(("codigo-minimap", doc.id().0, view.pane)),
         Sense::click_and_drag(),
     );
     if response.clicked() || response.dragged() {
@@ -510,7 +517,7 @@ fn show_text(
     now: f64,
 ) -> Output {
     let mut out = Output::default();
-    let id = Id::unique(("codigo-editor", doc.id().0));
+    let id = editor_id(doc.id().0, view.pane);
     let p = look.palette;
     if focus {
         ui.memory_mut(|m| m.request_focus(id));
@@ -595,7 +602,7 @@ fn show_text(
     };
 
     let scrolled = area
-        .id_salt(("codigo-scroll", doc.id().0))
+        .id_salt(("codigo-scroll", doc.id().0, view.pane))
         .auto_shrink([false, false])
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
         .show_viewport(ui, |ui, viewport| {

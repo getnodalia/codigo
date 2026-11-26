@@ -344,6 +344,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Source control", "Control de versiones"),
     ("Spaces: {}", "Espacios: {}"),
     ("Split it into smaller functions that each do one thing.", "Divídela en funciones más pequeñas que hagan una sola cosa."),
+    ("Split the editor", "Dividir el editor"),
     ("Stage", "Preparar"),
     ("Stage all", "Preparar todo"),
     ("Stage all changes", "Preparar todos los cambios"),

@@ -62,6 +62,16 @@ pub struct Tab {
     pub view: editor::View,
 }
 
+/// Two views of the open files side by side. Each side shows one file; the side that has the
+/// keyboard follows the active tab, so choosing a tab fills the pane you are in.
+pub struct Split {
+    pub left: DocId,
+    pub right: DocId,
+    pub right_focused: bool,
+    /// The right side's own view when both sides show the same file.
+    pub twin: editor::View,
+}
+
 pub struct Toast {
     pub text: String,
     pub until: f64,
@@ -203,6 +213,7 @@ pub struct App {
     applied: Option<(Appearance, bool, bool)>,
     decorated: Option<bool>,
     pub focus_editor: bool,
+    pub split: Option<Split>,
     pub session_dirty: bool,
     last_session: Instant,
     last_disk_check: Instant,
@@ -288,6 +299,7 @@ impl App {
             applied: None,
             decorated: None,
             focus_editor: true,
+            split: None,
             session_dirty: false,
             last_session: Instant::now(),
             last_disk_check: Instant::now(),
@@ -1089,6 +1101,22 @@ impl App {
                 self.settings.show_whitespace = !self.settings.show_whitespace;
                 self.save_settings();
             }
+            ToggleSplit => {
+                self.split = match (self.split.take(), self.tabs.get(self.active)) {
+                    (None, Some(tab)) => {
+                        let mut twin = editor::View::new();
+                        twin.pane = 1;
+                        Some(Split {
+                            left: tab.doc.id(),
+                            right: tab.doc.id(),
+                            right_focused: false,
+                            twin,
+                        })
+                    }
+                    _ => None,
+                };
+                self.focus_editor = true;
+            }
             ToggleMinimap => {
                 self.settings.minimap = !self.settings.minimap;
                 self.save_settings();
@@ -1516,6 +1544,15 @@ impl App {
         }
     }
 
+    /// Which view of the active file has the keyboard: 1 only in a split of one file with the
+    /// right side focused.
+    pub fn active_pane(&self) -> u8 {
+        match &self.split {
+            Some(s) if s.right_focused && s.left == s.right => 1,
+            _ => 0,
+        }
+    }
+
     pub fn editor_options(&self) -> editor::Options {
         editor::Options {
             font_size: self.settings.font_size,
@@ -1662,9 +1699,11 @@ impl eframe::App for App {
             }
         }
 
-        let editor_focus = self.tabs.get(self.active).is_some_and(|t| {
-            ctx.memory(|m| m.has_focus(egui::Id::unique(("codigo-editor", t.doc.id().0))))
-        });
+        let pane = self.active_pane();
+        let editor_focus = self
+            .tabs
+            .get(self.active)
+            .is_some_and(|t| ctx.memory(|m| m.has_focus(editor::editor_id(t.doc.id().0, pane))));
         crate::lsp_ui::keys(self, &ctx);
         crate::snippets_ui::keys(self, &ctx, editor_focus);
         crate::terminal_ui::input(self, &ctx);

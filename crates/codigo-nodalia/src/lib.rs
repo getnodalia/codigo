@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub use nodalia_theme::Accent;
 
 /// The `nodalia-design` commit the template depends on: the one Código itself is built with.
-pub const THEME_REV: &str = "e8e0af870fcb5b56c9b8665c4f411a1b634abf13";
+pub const THEME_REV: &str = "8bb4b7dcbf186644ab606b806569c851056cee2c";
 /// The `getnodalia/foundation` commit the template's CI calls.
 pub const FOUNDATION_REV: &str = "e756876881280ba136ec527be594f616c9a65a5a";
 
