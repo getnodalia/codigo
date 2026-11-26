@@ -613,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-app"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "codigo-engine",
  "codigo-nodalia",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-engine"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "codigo-lsp",
  "codigo-syntax",
@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-lsp"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-nodalia"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "nodalia-theme",
  "tempfile",
@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-quality"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "codigo-syntax",
  "codigo-workspace",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-syntax"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "codigo-text",
  "ropey",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-term"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "portable-pty",
  "thiserror 2.0.21",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-text"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "regex",
  "ropey",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-workspace"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "codigo-text",
  "ignore",
