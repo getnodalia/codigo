@@ -13,6 +13,7 @@ use egui::{
     RichText, ScrollArea, Sense, Stroke, Ui, UiBuilder,
 };
 use nodalia_theme::creator::{self as cr, layout, Look};
+use nodalia_theme::engineering as eng;
 use nodalia_theme::for_egui::color;
 use nodalia_theme::{font_size, Mode};
 
@@ -219,13 +220,20 @@ fn apply(ctx: &egui::Context, app: &mut App, act: Act) {
     }
 }
 
+/// The engineering suite's colours for the same palette.
+pub fn eng_look(look: &Look) -> eng::Look {
+    eng::Look::new(look.palette.clone())
+}
+
 pub fn island(ui: &mut Ui, look: &Look, rect: Rect, id: &str, add: impl FnOnce(&mut Ui)) {
     ui.scope_builder(UiBuilder::new().max_rect(rect).id_salt(id), |ui| {
-        cr::island(look).show(ui, |ui| {
-            ui.set_min_size(rect.size());
-            ui.set_max_size(rect.size());
-            add(ui);
-        });
+        eng::island(&eng_look(look))
+            .inner_margin(Margin::ZERO)
+            .show(ui, |ui| {
+                ui.set_min_size(rect.size());
+                ui.set_max_size(rect.size());
+                add(ui);
+            });
     });
 }
 
@@ -476,18 +484,18 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         });
     });
     if app.panel != Panel::Explorer {
-        ui.label(
-            RichText::new(match app.panel {
+        eng::panel_header(
+            ui,
+            &eng_look(look),
+            match app.panel {
                 Panel::Explorer | Panel::Search => tr("Search"),
                 Panel::Quality => tr("Quality"),
                 Panel::Problems => tr("Problems"),
                 Panel::Debug => tr("Debug"),
                 Panel::Git => tr("Source control"),
                 Panel::GitHub => tr("GitHub"),
-            })
-            .strong()
-            .size(font_size::SMALL)
-            .color(color(look.palette.text_secondary)),
+            },
+            |_| {},
         );
     }
     ui.add_space(4.0);
@@ -1339,7 +1347,16 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
         |ui| {
             ui.spacing_mut().item_spacing.x = 14.0;
             ui.add_space(6.0);
-            let small = |text: String| RichText::new(text).size(font_size::SMALL).color(ink);
+            let small = |text: String| RichText::new(text).font(eng::caption()).color(ink);
+            // Numbers and positions are set in the suite's mono face so columns line up.
+            let value = |text: String| {
+                RichText::new(text)
+                    .font(FontId::new(
+                        eng::size::CAPTION + 0.5,
+                        egui::FontFamily::Monospace,
+                    ))
+                    .color(color(p.text_primary))
+            };
             if let Some(git) = app.project.as_ref().and_then(|p| p.git.as_ref()) {
                 icon(ui, "branch", 13.0, ink);
                 let branch = git
@@ -1422,8 +1439,8 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
                 if language.clicked() {
                     acts.push(Act::Run(Cmd::ChangeLanguage));
                 }
-                ui.label(small("UTF-8".to_owned()));
-                ui.label(small(
+                ui.label(value("UTF-8".to_owned()));
+                ui.label(value(
                     match doc.line_ending() {
                         LineEnding::Lf => "LF",
                         LineEnding::CrLf => "CRLF",
@@ -1438,7 +1455,7 @@ fn status_bar(ui: &mut Ui, rect: Rect, app: &App, look: &Look, acts: &mut Vec<Ac
                 let (line, col) = b.line_col(b.primary().head);
                 let position = ui
                     .add(
-                        egui::Label::new(small(trf(
+                        egui::Label::new(value(trf(
                             "Line {}, column {}",
                             &[&(line + 1).to_string(), &(col + 1).to_string()],
                         )))

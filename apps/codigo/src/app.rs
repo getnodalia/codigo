@@ -224,6 +224,9 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, open: &[PathBuf]) -> App {
         let settings = Settings::load();
         i18n::set(Lang::from_setting(&settings.language));
+        // The Engineering suite's type: IBM Plex Sans for the interface and Plex Mono for the
+        // editor and every value, with egui's faces and the system's behind them.
+        nodalia_theme::engineering::install_fonts(&cc.egui_ctx);
         let (tx, rx) = channel();
         // Compiling a grammar's queries costs ~20 ms the first time; do it for
         // the common languages off the UI thread so the first open is instant.
@@ -344,6 +347,7 @@ impl App {
             Appearance::Light => for_egui::apply(ctx, &appearance(false)),
             Appearance::Dark => for_egui::apply(ctx, &appearance(true)),
         }
+        nodalia_theme::engineering::apply_text_styles(ctx);
     }
 
     pub fn sender(&self) -> Sender<Msg> {
