@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Código
+GenericName=Code editor
+GenericName[es]=Editor de código
+Comment=Fast, native code editor with a terminal, language servers and built-in code quality
+Comment[es]=Editor de código nativo y rápido, con terminal, servidores de lenguaje y calidad de código integrada
+Exec=codigo %F
+Icon=dev.danielmiguelt.Codigo
+Terminal=false
+Categories=Development;IDE;TextEditor;
+Keywords=code;editor;ide;programming;rust;terminal;lsp;
+MimeType=text/plain;text/x-rust;text/x-python;text/x-csrc;text/x-c++src;application/json;application/x-shellscript;text/markdown;
+StartupWMClass=dev.danielmiguelt.Codigo

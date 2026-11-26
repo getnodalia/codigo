@@ -3,7 +3,7 @@
 Código aims to be an editor you can work in all day, in any language, with an AI beside you. This
 file lists what exists and what does not. Nothing under "Next" is available yet.
 
-## Exists (0.1, in development)
+## Exists (0.1)
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
@@ -36,8 +36,9 @@ restore, language server diagnostics, hover, completion and go to definition, a 
 6. **Git in the editor.** Changes view, diff gutter, stage, commit and branch switching.
 7. **Debugging** through the Debug Adapter Protocol, snippets, split editors and a minimap, with
    lighter parsing and a memory budget for very large files.
-8. **Release packages**: AppImage, .deb and .rpm, a macOS DMG with its own install window, a Windows
-   installer, the website page and a Nodalia Launcher entry.
+8. **Distribution**: the packages exist (AppImage, .deb, .rpm, tarball, a macOS DMG with its own
+   install window and a portable Windows zip); still to do: a Windows installer, the website page
+   and a Nodalia Launcher entry.
 
 ## Known gaps
 

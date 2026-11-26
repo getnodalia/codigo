@@ -3,7 +3,7 @@
 Código is Nodalia's code editor: a fast, native editor for any language, drawn in the Nodalia
 Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
 
-> Código is at an early stage (0.1, in development). This page describes only what runs today;
+> Código is at an early stage (0.1). This page describes only what runs today;
 > what is planned is in [ROADMAP.md](ROADMAP.md).
 
 ## What it does today
@@ -53,6 +53,13 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   ones on macOS and Windows), a global menu over D-Bus on Linux, a reduced-motion option and an
   in-app update check.
 - **Spanish and English**, following your system language or your choice in Preferences.
+
+## Download
+
+Each release at [github.com/getnodalia/codigo/releases](https://github.com/getnodalia/codigo/releases)
+carries an AppImage, `.deb`, `.rpm` and tarball for Linux (x86-64), a universal DMG for macOS 11 and
+later, and a portable zip for Windows 10/11 (x64). The macOS and Windows builds are not signed, so
+the system asks for confirmation the first time they open.
 
 ## Build
 

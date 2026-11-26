@@ -8,14 +8,14 @@ Status: first version on a pull request, 2026-11-26.
 Rust workspace: `codigo-text`, `codigo-syntax`, `codigo-workspace`, `codigo-engine` and the egui app
 `codigo-app` (binary `codigo`), with `nodalia-theme` and `nodalia-update`. CI calls Foundation's
 `rust-gate`, `git-sources` and `agents-check` workflows, pinned by commit, plus the release-notes
-check.
+check, and the release workflows (`release-auto`, `release-linux`, `release-macos` with a DMG
+window in Código's colour, `release-windows`) through Foundation's `release-tag` and
+`release-publish`.
 
 ## Desired state
 
-Creator suite look with the shared top bar, Home and dialogs; release workflows (`release-auto`,
-`release-linux`, `release-macos` with a DMG window in Código's colour, `release-windows`) through
-Foundation's `release-tag` and `release-publish`; website page getnodalia.com/codigo and a Nodalia
-Launcher catalog entry.
+Creator suite look with the shared top bar, Home and dialogs; a Windows installer (MSI) beside the
+portable zip; website page getnodalia.com/codigo and a Nodalia Launcher catalog entry.
 
 ## Inherited dependencies still pending
 
@@ -32,7 +32,7 @@ None.
 
 - The editor, tabs, explorer rows and status bar are drawn in Código; if another app needs them,
   they move to nodalia-design.
-- Release packaging, DMG background and the Launcher entry.
+- The Windows MSI, the website page and the Launcher entry.
 
 ## Missing tests
 

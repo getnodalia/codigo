@@ -90,8 +90,10 @@ A pull request that sets `[workspace.package] version` to a release version and 
 `docs/release-notes/vX.Y.Z.md` (format in that folder's README, checked by
 `scripts/check-release-notes.sh`) releases it when it merges. Releases that add features bump the
 minor, fix-only releases the patch. `main` carries a `-dev` version between releases. Nobody pushes
-a tag by hand. The release workflows (Linux, macOS DMG with its own window, Windows) are not in the
-repository yet; see `NODALIA_MIGRATION.md`.
+a tag by hand. `release-auto.yml` tags the merge through Foundation's `release-tag`, `release-linux.yml`
+(AppImage, .deb, .rpm, tarball), `release-macos.yml` (unsigned DMG with its own window) and
+`release-windows.yml` (portable zip) attach their files, and Foundation's `release-publish` publishes
+the release. The asset names are what `nodalia-update` looks for: keep them.
 
 ## Pull requests
 

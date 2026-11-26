@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (software centres). Template: package.sh substitutes @VERSION@ and @DATE@
+     from Cargo.toml and the build date. -->
+<component type="desktop-application">
+  <id>dev.danielmiguelt.Codigo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Código</name>
+  <summary>A fast, native code editor with code quality built in</summary>
+  <developer id="dev.danielmiguelt">
+    <name>Nodalia</name>
+  </developer>
+  <description>
+    <p>
+      Código is a native code editor written in Rust, drawn in the Nodalia Design Language. It is
+      light on memory, opens big folders quickly and works with any language that has a
+      tree-sitter grammar or a language server.
+    </p>
+    <ul>
+      <li>Multiple cursors, search and replace across the project, and files in any encoding</li>
+      <li>Syntax highlighting with tree-sitter and language servers for diagnostics, completion, hover and go to definition</li>
+      <li>An integrated terminal and a run console that turns compiler errors into links</li>
+      <li>Local code quality and security analysis, with a gate, and no service to sign up for</li>
+      <li>Tools for building Nodalia apps: a new-app template and Nodalia convention checks</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">dev.danielmiguelt.Codigo.desktop</launchable>
+  <icon type="stock">dev.danielmiguelt.Codigo</icon>
+  <url type="homepage">https://getnodalia.com/codigo</url>
+  <url type="bugtracker">https://github.com/getnodalia/codigo/issues</url>
+  <url type="help">https://github.com/getnodalia/codigo</url>
+  <categories>
+    <category>Development</category>
+    <category>IDE</category>
+    <category>TextEditor</category>
+  </categories>
+  <keywords>
+    <keyword>code</keyword>
+    <keyword>editor</keyword>
+    <keyword>ide</keyword>
+    <keyword>programming</keyword>
+  </keywords>
+  <branding>
+    <color type="primary" scheme_preference="light">#7fd6c4</color>
+    <color type="primary" scheme_preference="dark">#087a66</color>
+  </branding>
+  <requires>
+    <display_length compare="ge">760</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <provides>
+    <binary>codigo</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>
