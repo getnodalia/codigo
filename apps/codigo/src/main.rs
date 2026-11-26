@@ -19,11 +19,13 @@ mod app;
 mod chrome;
 mod editor;
 mod explorer;
+mod file_icons;
 mod i18n;
 mod icon;
 mod layout;
 #[cfg(target_os = "linux")]
 mod linux_menu;
+mod lsp_ui;
 mod menu;
 mod overlays;
 mod spanish;

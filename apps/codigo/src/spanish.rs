@@ -66,6 +66,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Focus explorer", "Ir al explorador"),
     ("Font size", "Tamaño de letra"),
     ("Go", "Ir"),
+    ("Go to definition", "Ir a la definición"),
     ("Go to file…", "Ir al archivo…"),
     ("Go to line…", "Ir a la línea…"),
     ("Help", "Ayuda"),
@@ -102,8 +103,13 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Next match", "Coincidencia siguiente"),
     ("Next tab", "Pestaña siguiente"),
     ("No command matches.", "Ningún comando coincide."),
+    (
+        "No definition found.",
+        "No se ha encontrado ninguna definición.",
+    ),
     ("No file matches.", "Ningún archivo coincide."),
     ("No folder is open.", "No hay ninguna carpeta abierta."),
+    ("No information here.", "No hay información aquí."),
     ("No language matches.", "Ningún lenguaje coincide."),
     ("No results", "Sin resultados"),
     ("No results.", "Sin resultados."),
@@ -160,6 +166,10 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Selection", "Selección"),
     ("Show in file manager", "Mostrar en el gestor de archivos"),
     (
+        "Show information about the symbol",
+        "Mostrar información sobre el símbolo",
+    ),
+    (
         "Show or hide the sidebar",
         "Mostrar u ocultar la barra lateral",
     ),
@@ -168,6 +178,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Single cursor", "Un solo cursor"),
     ("Source code", "Código fuente"),
     ("Spaces: {}", "Espacios: {}"),
+    ("Suggest completions", "Sugerir autocompletado"),
     ("System", "Sistema"),
     ("Tabs", "Tabuladores"),
     ("That folder no longer exists.", "Esa carpeta ya no existe."),
@@ -190,6 +201,18 @@ pub const SPANISH: &[(&str, &str)] = &[
     (
         "The file is too large to open (the limit is 64 MB).",
         "El archivo es demasiado grande para abrirlo (el límite son 64 MB).",
+    ),
+    (
+        "The language server could not answer.",
+        "El servidor de lenguaje no ha podido responder.",
+    ),
+    (
+        "The language server is not ready yet.",
+        "El servidor de lenguaje aún no está listo.",
+    ),
+    (
+        "There is no language server for this file.",
+        "No hay servidor de lenguaje para este archivo.",
     ),
     (
         "These files have changes that are not saved.",
