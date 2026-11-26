@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Código MSI (WiX Toolset v5: `dotnet tool install -g wix --version 5.0.2`, plus the UI and Util
+  Código MSI (WiX Toolset v5: `dotnet tool install -g wix` at version 5.0.2, plus the UI and Util
   extensions: `wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2`).
   Built by package.ps1:
 
