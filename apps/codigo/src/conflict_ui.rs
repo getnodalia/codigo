@@ -106,7 +106,9 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut view: Confli
                     }
                 } else {
                     ScrollArea::vertical()
+                        .id_salt("conflict-blocks")
                         .max_height((ctx.content_rect().height() - 260.0).max(200.0))
+                        .min_scrolled_height(220.0)
                         .show(ui, |ui| {
                             for (i, c) in all.iter().enumerate() {
                                 block(ui, look, text, i, all.len(), c, idle, &mut chosen);

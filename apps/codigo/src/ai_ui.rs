@@ -382,8 +382,8 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
         });
     });
     ui.add_space(4.0);
-    let input_height = 96.0;
-    let height = (ui.available_height() - input_height - 40.0).max(80.0);
+    let input_height = 170.0;
+    let height = (ui.available_height() - input_height).max(80.0);
     let mut apply_turn: Option<usize> = None;
     let mut copy: Option<String> = None;
     ScrollArea::vertical()
