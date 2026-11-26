@@ -20,5 +20,5 @@ pub mod language;
 pub mod scope;
 
 pub use highlight::{Span, Syntax};
-pub use language::{detect, find, languages, LanguageDef};
+pub use language::{detect, detect_with_first_line, find, languages, plain, LanguageDef};
 pub use scope::Scope;
