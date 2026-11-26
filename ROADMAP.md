@@ -3,11 +3,11 @@
 Código aims to be an editor you can work in all day, in any language, with an AI beside you. This
 file lists what exists and what does not. Nothing under "Next" is available yet.
 
-## Exists (0.5)
+## Exists (0.6)
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, hover, completion, go to definition, references, rename and format, snippets, a minimap and a split editor, the Engineering suite look (IBM Plex type and shared panels), a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub in the window (clone, pull requests, issues and reviews), files that open at once, Run and Debug in any project, code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion, go to definition, references, rename and format, snippets, a minimap and a split editor, the Engineering suite look (IBM Plex type and shared panels), a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub in the window (clone, pull requests, issues and reviews), files that open at once, Run and Debug in any project, AI assistants (chat, explain, fix, refactor, document and tests through Anthropic, OpenAI, Ollama or a compatible server, keys in the keyring), stash, merge and conflict resolution, staging by hunk, blame at the end of the line, creating a pull request and comments on a diff line, a Windows installer (MSI), code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
@@ -31,21 +31,23 @@ restore, language server diagnostics, hover, completion, go to definition, refer
    Spanish table complete, licence headers) exist. Still to do: more templates (GTK, a server),
    a component and theme preview, helpers for tokens and icons, and checks for the remaining
    rules (no unwrap in a crate without the lint, wasm builds, assets in `ATTRIBUTION.md`).
-5. **AI assistants.** Chat, inline edits and completions through the shared `nodalia-assistant`
-   crate, with the provider chosen by the user and keys kept in the system keyring. Nothing leaves
-   the computer without being asked. Review of a change for quality and security comes with it.
-6. **Git in the editor** is in (changes, diffs, stage, commit, branches, push and pull, and
-   GitHub pull requests, issues and cloning); still to do: partial staging by hunk, merge
-   conflict resolution, stash, blame in the gutter, creating a pull request from Código and
-   inline review comments on a diff line.
+5. **AI assistants** are in (chat about the file or selection, explain, fix, refactor, document and
+   write tests, applied as an undoable edit, with the provider and key chosen by the user and
+   the key kept in the system's keyring). Still to do: inline completions as you type, edits
+   across several files, review of a change for quality and security, and trying the real
+   Anthropic and OpenAI services and the keyring.
+6. **Git in the editor** is in (changes, diffs, stage by hunk, commit, branches, push and pull,
+   stash, merge and conflict resolution, blame at the end of the line, and GitHub pull requests,
+   issues, cloning, creating a pull request and line comments on a diff); still to do: trying the
+   GitHub writes against a real repository, a blame gutter, and a three-way merge editor.
 7. **Debugging** is in (see above); still to do: conditional breakpoints, watches that persist,
    breakpoints that follow edits, tried-and-tested Go and Python sessions, and launch
    configurations. Also here: a memory budget for very large files. Snippets, a split editor and a
    minimap exist; still to do for them: more than two panes, drag a tab to split, and snippets from
    extensions.
 8. **Distribution**: the packages exist (AppImage, .deb, .rpm, tarball, a macOS DMG with its own
-   install window and a portable Windows zip); still to do: a Windows installer, the website page
-   and a Nodalia Launcher entry.
+   install window, and for Windows a per-user MSI and a portable zip); still to do: the website
+   page and a Nodalia Launcher entry.
 
 ## Known gaps
 

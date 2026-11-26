@@ -3,7 +3,7 @@
 Código is Nodalia's code editor and part of its Engineering suite: a fast, native editor for any
 language, drawn in the Nodalia Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
 
-> Código is at an early stage (0.5). This page describes only what runs today;
+> Código is at an early stage (0.6). This page describes only what runs today;
 > what is planned is in [ROADMAP.md](ROADMAP.md).
 
 ## What it does today
@@ -57,8 +57,13 @@ language, drawn in the Nodalia Design Language and written entirely in Rust. It 
 - **Git, in the window.** The Source control panel (`Ctrl+Shift+G`) shows the changes of the
   open repository, opens the diff of a file, stages and unstages, discards (with a second click to
   confirm), commits (`Ctrl+Enter` in the message box), switches and creates branches, and
-  fetches, pulls and pushes. Git is run as the `git` program on your computer, so your SSH keys
-  and credential helper work as always.
+  fetches, pulls and pushes. A diff can be staged by hunk (a button on each hunk stages,
+  unstages or discards just that part), changes can be stashed and the latest stash applied, a branch can be
+  merged into the current one, and when a merge leaves conflicts a window lists each block of a
+  conflicted file and keeps *current*, *incoming* or *both* one block at a time before you mark
+  the file resolved. *Show who changed each line* (`Ctrl+Alt+B`) writes the author, date and
+  subject of the last change at the end of the cursor's line. Git is run as the `git` program on
+  your computer, so your SSH keys and credential helper work as always.
 - **GitHub, in the window.** The GitHub panel (`Ctrl+Shift+H`) lists the open pull requests and
   issues of the repository you are in, the pull requests you opened or that wait for your review,
   and your repositories. A pull request opens in its own window with its description, checks,
@@ -69,7 +74,11 @@ language, drawn in the Nodalia Design Language and written entirely in Rust. It 
   (device flow) is built in but needs a GitHub OAuth app, so it only shows when
   `CODIGO_GITHUB_CLIENT_ID` is set. Código ships no one else's client. Status, diffs, staging,
   committing, cloning and reads of public GitHub data have been tried; reviews, saving to the
-  keyring and the browser sign-in have not been run against a real account.
+  keyring and the browser sign-in have not been run against a real account. *Create a pull
+  request…* pushes the current branch and opens a pull request from it, and in a pull request's
+  diff a click on a line's number opens a comment on that line (shown as a dot, with its thread
+  and a box to reply). Both go through the GitHub API and have not been run against a real
+  repository either.
 - **Code quality and security, built in.** The Quality tab (`Ctrl+Shift+Y`) analyses the folder
   with no server to run and nothing leaving your computer: hard-coded secrets (private keys,
   cloud tokens, passwords), unsafe patterns (`eval`, shell commands from strings, SQL built from
@@ -85,6 +94,15 @@ language, drawn in the Nodalia Design Language and written entirely in Rust. It 
   engineering rules: colours written in the code instead of taken from the tokens, interface text
   that skips `tr()`, strings missing from the `SPANISH` table, and files without a licence header.
   A theme and token preview and helpers for icons are not there yet.
+- **AI assistants, with your own key.** The Assistant panel (`Ctrl+Alt+I`) chats about the open
+  file or your selection, and *Explain*, *Fix*, *Refactor*, *Document* and *Write tests for this
+  code* in the Assistant menu send what is selected (or the file) with that instruction; when the
+  answer is a change, *Apply* puts it in the editor, where it can be undone. Pick Anthropic,
+  OpenAI, Ollama or any OpenAI-compatible address in *Assistant settings…*. Código ships no key
+  and no account: the key is kept in the system's keyring, is sent only to the provider's own
+  host (over https, or to your own computer) and never appears in an error, and nothing is sent
+  until you ask. Tried end to end against a local OpenAI-compatible server; the real Anthropic
+  and OpenAI services and the keyring have not been tried.
 - **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
   the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
@@ -101,7 +119,8 @@ language, drawn in the Nodalia Design Language and written entirely in Rust. It 
 
 Each release at [github.com/getnodalia/codigo/releases](https://github.com/getnodalia/codigo/releases)
 carries an AppImage, `.deb`, `.rpm` and tarball for Linux (x86-64), a universal DMG for macOS 11 and
-later, and a portable zip for Windows 10/11 (x64). The macOS and Windows builds are not signed, so
+later, and, for Windows 10/11 (x64), an installer (`.msi`, for you only, no administrator rights)
+and a portable zip. The macOS and Windows builds are not signed, so
 the system asks for confirmation the first time they open.
 
 ## Build
