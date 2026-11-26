@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Overrides for the setup wizard's WixUI strings, so its pages name the version being installed
+  ([CodigoVersion] is the full version, pre-release tag included, set in codigo.wxs).
+-->
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="WelcomeDlgTitle" Value="{\WixUI_Font_Bigger}Welcome to [ProductName] [CodigoVersion]" />
+  <String Id="WelcomeDlgDescription" Value="Código is Nodalia's code editor and IDE: any language, language servers, a terminal, git and AI assistants.&#13;&#10;&#13;&#10;It installs for you only, so no administrator rights are needed. Click Next to continue." />
+  <String Id="InstallDirDlgDescription" Value="Click Next to install to the default folder, or click Change to pick another. Pick a folder you can write to (not Program Files)." />
+  <String Id="VerifyReadyDlgInstallTitle" Value="{\WixUI_Font_Title}Ready to install [ProductName] [CodigoVersion]" />
+  <!-- Also shown after a repair or removal from the same wizard, so it doesn't say "installed". -->
+  <String Id="ExitDialogTitle" Value="{\WixUI_Font_Bigger}Completed the [ProductName] [CodigoVersion] Setup Wizard" />
+</WixLocalization>

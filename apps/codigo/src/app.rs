@@ -32,6 +32,8 @@ pub enum Msg {
     Git(PathBuf, Option<GitInfo>),
     /// A file's changed lines against git, for the gutter.
     Marks(PathBuf, Vec<ws::LineChange>),
+    /// Who last changed each line of a file, read for this revision of its text.
+    Blame(PathBuf, u64, Vec<codigo_git::BlameLine>),
     Quality(u64, codigo_quality::Report),
     /// The program to debug was built and a debugger found, or why not.
     DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
@@ -43,6 +45,8 @@ pub enum Msg {
     Vcs(crate::vcs_ui::GitMsg),
     /// GitHub answered on a worker thread.
     Gh(crate::github_ui::GhMsg),
+    /// The assistant answered on a worker thread.
+    Ai(crate::ai_ui::AiMsg),
 }
 
 /// Files above this size are read on a worker thread; smaller ones open before the next frame.
@@ -86,6 +90,7 @@ pub enum Panel {
     Debug,
     Git,
     GitHub,
+    Assistant,
 }
 
 /// The find bar's state.
@@ -187,6 +192,7 @@ pub struct App {
     pub vcs: crate::vcs_ui::GitPanel,
     /// GitHub: the account, and the lists the panel shows.
     pub gh: crate::github_ui::GithubPanel,
+    pub ai: crate::ai_ui::AiPanel,
     /// A language-server question waiting for its answer.
     pub query: Option<crate::lsp_ui::InFlight>,
     /// The hover or completion popup next to the caret.
@@ -274,6 +280,7 @@ impl App {
             debug: crate::debug_ui::DebugPanel::default(),
             vcs: crate::vcs_ui::GitPanel::default(),
             gh: crate::github_ui::GithubPanel::default(),
+            ai: crate::ai_ui::AiPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
             snippets: crate::snippets_ui::State::new(),
@@ -384,6 +391,26 @@ impl App {
             if self.settings.save_to(&path).is_err() {
                 self.toast(tr("Could not save the preferences."));
             }
+        }
+        self.sync_blame();
+    }
+
+    /// Read blame for the files that have none yet when it is on, and drop it when it is off.
+    fn sync_blame(&mut self) {
+        if !self.settings.blame {
+            for tab in &mut self.tabs {
+                tab.view.blame = None;
+            }
+            return;
+        }
+        let missing: Vec<PathBuf> = self
+            .tabs
+            .iter()
+            .filter(|t| t.view.blame.is_none())
+            .filter_map(|t| t.doc.path().map(Path::to_path_buf))
+            .collect();
+        for path in missing {
+            self.load_blame(&path);
         }
     }
 
@@ -792,12 +819,48 @@ impl App {
     /// Read a file's changed lines from git on a worker thread: `git diff` on a big repository
     /// takes long enough to be felt, so the window never waits for it.
     pub fn load_marks(&self, path: PathBuf) {
+        self.load_blame(&path);
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
         std::thread::spawn(move || {
             let marks = ws::line_changes(&path);
             let _ = tx.send(Msg::Marks(path, marks));
             ctx.request_repaint();
         });
+    }
+
+    /// Read who last changed each line, when blame is on. A file git does not track, or a
+    /// folder that is no repository, simply shows nothing.
+    pub fn load_blame(&self, path: &Path) {
+        if !self.settings.blame {
+            return;
+        }
+        let Some(revision) = self
+            .tabs
+            .iter()
+            .find(|t| t.doc.path() == Some(path))
+            .map(|t| t.doc.buffer().revision())
+        else {
+            return;
+        };
+        let (tx, ctx, path) = (self.tx.clone(), self.ctx.clone(), path.to_path_buf());
+        std::thread::spawn(move || {
+            let lines = path
+                .parent()
+                .and_then(codigo_git::Repo::discover)
+                .and_then(|repo| {
+                    let rel = path.strip_prefix(repo.root()).ok()?.to_str()?.to_owned();
+                    repo.blame(&rel).ok()
+                })
+                .unwrap_or_default();
+            let _ = tx.send(Msg::Blame(path, revision, lines));
+            ctx.request_repaint();
+        });
+    }
+
+    /// Turn blame on or off and read it for the open files.
+    pub fn toggle_blame(&mut self) {
+        self.settings.blame = !self.settings.blame;
+        self.save_settings();
     }
 
     pub fn list_files(&mut self) {
@@ -903,10 +966,18 @@ impl App {
                 Msg::Opened(job, result) => self.opened(job, result),
                 Msg::Vcs(msg) => crate::vcs_ui::on_msg(self, msg),
                 Msg::Gh(msg) => crate::github_ui::on_msg(self, msg),
+                Msg::Ai(msg) => crate::ai_ui::on_msg(self, msg),
                 Msg::Marks(path, marks) => {
                     for tab in &mut self.tabs {
                         if tab.doc.path() == Some(path.as_path()) {
                             tab.view.marks = marks.clone();
+                        }
+                    }
+                }
+                Msg::Blame(path, revision, lines) => {
+                    for tab in &mut self.tabs {
+                        if tab.doc.path() == Some(path.as_path()) {
+                            tab.view.blame = Some(std::sync::Arc::new((revision, lines.clone())));
                         }
                     }
                 }
@@ -1194,12 +1265,25 @@ impl App {
             GitPush => crate::vcs_ui::push(self),
             GitFetch => crate::vcs_ui::fetch(self),
             GitSwitchBranch => crate::vcs_ui::open_branches(self),
+            GitMerge => crate::vcs_ui::open_merge(self),
+            GitMergeAbort => crate::vcs_ui::merge_abort(self),
+            GitStash => crate::vcs_ui::stash(self),
+            GitStashPop => crate::vcs_ui::stash_pop(self),
+            GitToggleBlame => self.toggle_blame(),
             GitHubShow => crate::github_ui::show(self),
             GitHubSignIn => crate::github_ui::sign_in_device(self),
             GitHubSignInCli => crate::github_ui::sign_in_cli(self),
             GitHubSignOut => crate::github_ui::sign_out(self),
             GitHubRefresh => crate::github_ui::refresh(self),
             CloneRepository => crate::github_ui::open_clone(self),
+            GitHubCreatePull => crate::github_ui::open_create_pull(self),
+            AiShow => crate::ai_ui::show(self),
+            AiExplain => crate::ai_ui::task(self, codigo_ai::prompts::Task::Explain),
+            AiFix => crate::ai_ui::task(self, codigo_ai::prompts::Task::Fix),
+            AiRefactor => crate::ai_ui::task(self, codigo_ai::prompts::Task::Refactor),
+            AiDocument => crate::ai_ui::task(self, codigo_ai::prompts::Task::Document),
+            AiTest => crate::ai_ui::task(self, codigo_ai::prompts::Task::Test),
+            AiSettings => crate::ai_ui::open_settings(self),
             NextTab => {
                 if !self.tabs.is_empty() {
                     self.active = (self.active + 1) % self.tabs.len();
@@ -1561,6 +1645,7 @@ impl App {
             highlight_line: self.settings.highlight_active_line,
             whitespace: self.settings.show_whitespace,
             minimap: self.settings.minimap,
+            blame: self.settings.blame,
             auto_close_pairs: self.settings.auto_close_pairs,
         }
     }

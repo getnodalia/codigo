@@ -29,6 +29,11 @@ impl std::fmt::Debug for Auth {
 const MAX_OUTPUT: usize = 16 * 1024 * 1024;
 
 pub fn git(dir: &Path, args: &[&str], auth: &Auth) -> Result<String> {
+    git_input(dir, args, None, auth)
+}
+
+/// Like [`git`], with `input` written to the command's standard input (for `git apply`).
+pub fn git_input(dir: &Path, args: &[&str], input: Option<&[u8]>, auth: &Auth) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.current_dir(dir)
         .args(["-c", "core.fsmonitor=false", "-c", "core.quotepath=off"])
@@ -36,7 +41,11 @@ pub fn git(dir: &Path, args: &[&str], auth: &Auth) -> Result<String> {
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("LC_ALL", "C")
-        .stdin(Stdio::null());
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        });
     if let Auth::GitHubToken(token) = auth {
         // Through the environment, so the token is in no argument list and no file.
         let basic = base64::encode(format!("x-access-token:{token}").as_bytes());
@@ -47,9 +56,22 @@ pub fn git(dir: &Path, args: &[&str], auth: &Auth) -> Result<String> {
                 format!("Authorization: Basic {basic}"),
             );
     }
-    let out = cmd
-        .output()
-        .map_err(|e| Error::NotInstalled(e.to_string()))?;
+    let out = match input {
+        None => cmd.output(),
+        Some(bytes) => cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                if let Some(mut stdin) = child.stdin.take() {
+                    use std::io::Write;
+                    // A write error means git already refused the input; its message follows.
+                    let _ = stdin.write_all(bytes);
+                }
+                child.wait_with_output()
+            }),
+    }
+    .map_err(|e| Error::NotInstalled(e.to_string()))?;
     if !out.status.success() {
         let mut text = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         if text.is_empty() {

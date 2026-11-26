@@ -20,6 +20,7 @@ The figure was cut out with nodalia-design's `tools/app-portrait`.
 | `codigo.svg` | master: the artwork in a 512 rounded tile (radius 112) |
 | `codigo-linux.svg` | Colloid's application grid: a 224 tile at 16 on a 256 canvas, soft shadow |
 | `codigo-1024.png` | the master on Apple's icon grid (824 px tile, transparent margin); `packaging/macos/package.sh` builds the `.icns` from it |
+| `codigo.ico` | Windows: the sizes 16–256 of the Linux set packed into one icon (PNG entries); `apps/codigo/build.rs` embeds it in `codigo.exe` and the MSI uses it for Apps & features |
 | `hicolor/<size>x<size>/apps/dev.danielmiguelt.Codigo.png`, `hicolor/scalable/…svg` | Linux icon theme (the 256 px one is also the window icon and the logo in the app) |
 
 ## Regenerate

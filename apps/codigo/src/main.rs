@@ -15,8 +15,11 @@
     clippy::unreachable
 )]
 
+mod ai_ui;
 mod app;
+mod blame_ui;
 mod chrome;
+mod conflict_ui;
 mod debug_ui;
 mod editor;
 mod explorer;

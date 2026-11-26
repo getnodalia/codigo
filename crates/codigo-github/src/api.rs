@@ -4,7 +4,9 @@
 use serde_json::{json, Value};
 
 use crate::http::{request, Method};
-use crate::model::{Check, Comment, Issue, Pull, PullDetail, PullFile, RepoInfo, User};
+use crate::model::{
+    Check, Comment, Issue, Pull, PullDetail, PullFile, RepoInfo, ReviewComment, User,
+};
 use crate::{Error, Result};
 
 /// Which pull requests to look for across GitHub.
@@ -44,6 +46,28 @@ impl ReviewEvent {
             ReviewEvent::Comment => "COMMENT",
         }
     }
+}
+
+/// What a new pull request says.
+#[derive(Clone, Copy, Debug)]
+pub struct NewPull<'a> {
+    pub title: &'a str,
+    pub body: &'a str,
+    /// The branch with the changes.
+    pub head: &'a str,
+    /// The branch they should go into.
+    pub base: &'a str,
+    pub draft: bool,
+}
+
+/// One line of a pull request's diff.
+#[derive(Clone, Copy, Debug)]
+pub struct LinePlace<'a> {
+    pub path: &'a str,
+    /// The line number in the new file, or in the old one when `left`.
+    pub line: u64,
+    /// The old side of the diff (a removed line).
+    pub left: bool,
 }
 
 const API: &str = "https://api.github.com";
@@ -227,6 +251,107 @@ impl Api {
         .map(drop)
     }
 
+    /// The branch a repository merges into by default.
+    pub fn default_branch(&self, owner: &str, repo: &str) -> Result<String> {
+        let (owner, repo) = (segment(owner)?, segment(repo)?);
+        let v = self.get(&format!("/repos/{owner}/{repo}"))?;
+        v.get("default_branch")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| Error::Unexpected("the repository has no default branch".into()))
+    }
+
+    /// Open a pull request from `head` (a branch of this repository) into `base`.
+    pub fn create_pull(&self, owner: &str, repo: &str, new: &NewPull<'_>) -> Result<Pull> {
+        let (owner, repo) = (segment(owner)?, segment(repo)?);
+        if new.title.trim().is_empty() {
+            return Err(Error::Api("write a title first".into()));
+        }
+        if new.head.trim().is_empty() || new.base.trim().is_empty() {
+            return Err(Error::Api("choose the branches to compare".into()));
+        }
+        let v = self.post(
+            &format!("/repos/{owner}/{repo}/pulls"),
+            &json!({
+                "title": new.title.trim(),
+                "head": new.head,
+                "base": new.base,
+                "body": new.body,
+                "draft": new.draft,
+            }),
+        )?;
+        Ok(Pull::parse(&v, &format!("{owner}/{repo}")))
+    }
+
+    /// The comments left on lines of a pull request's diff, oldest first.
+    pub fn review_comments(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+    ) -> Result<Vec<ReviewComment>> {
+        let (owner, repo) = (segment(owner)?, segment(repo)?);
+        let v = self.get(&format!(
+            "/repos/{owner}/{repo}/pulls/{number}/comments?per_page=100"
+        ))?;
+        let mut all: Vec<ReviewComment> = array(v)?.iter().map(ReviewComment::parse).collect();
+        all.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        Ok(all)
+    }
+
+    /// Comment on one line of a pull request's diff. `commit` is the pull request's head.
+    pub fn add_review_comment(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        commit: &str,
+        place: &LinePlace<'_>,
+        body: &str,
+    ) -> Result<()> {
+        let (owner, repo) = (segment(owner)?, segment(repo)?);
+        if body.trim().is_empty() {
+            return Err(Error::Api("write something first".into()));
+        }
+        if commit.is_empty() || !commit.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(Error::Unexpected("that is not a commit".into()));
+        }
+        if place.path.is_empty() || place.line == 0 {
+            return Err(Error::Api("choose a line of the diff".into()));
+        }
+        self.post(
+            &format!("/repos/{owner}/{repo}/pulls/{number}/comments"),
+            &json!({
+                "body": body,
+                "commit_id": commit,
+                "path": place.path,
+                "line": place.line,
+                "side": if place.left { "LEFT" } else { "RIGHT" },
+            }),
+        )
+        .map(drop)
+    }
+
+    /// Answer a comment on the diff.
+    pub fn reply_review_comment(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        to: u64,
+        body: &str,
+    ) -> Result<()> {
+        let (owner, repo) = (segment(owner)?, segment(repo)?);
+        if body.trim().is_empty() {
+            return Err(Error::Api("write something first".into()));
+        }
+        self.post(
+            &format!("/repos/{owner}/{repo}/pulls/{number}/comments/{to}/replies"),
+            &json!({ "body": body }),
+        )
+        .map(drop)
+    }
+
     /// Submit a review of a pull request.
     pub fn review(
         &self,
@@ -276,6 +401,51 @@ mod tests {
             .review("a", "b", 1, ReviewEvent::RequestChanges, "")
             .is_err());
         assert!(api.review("a", "b", 1, ReviewEvent::Comment, " ").is_err());
+    }
+
+    #[test]
+    fn a_pull_request_and_a_line_comment_are_checked_before_any_request() {
+        let api = Api::new("ghp_secretsecret");
+        let new = |title, head, base| NewPull {
+            title,
+            body: "",
+            head,
+            base,
+            draft: false,
+        };
+        assert!(api.create_pull("a", "b", &new(" ", "x", "main")).is_err());
+        assert!(api.create_pull("a", "b", &new("t", "", "main")).is_err());
+        assert!(api.create_pull("a/b", "b", &new("t", "x", "main")).is_err());
+        let at = |path, line| LinePlace {
+            path,
+            line,
+            left: false,
+        };
+        assert!(api
+            .add_review_comment("a", "b", 1, "abc123", &at("f.rs", 0), "hi")
+            .is_err());
+        assert!(api
+            .add_review_comment("a", "b", 1, "abc123", &at("", 3), "hi")
+            .is_err());
+        assert!(api
+            .add_review_comment("a", "b", 1, "../x", &at("f.rs", 3), "hi")
+            .is_err());
+        assert!(api
+            .add_review_comment("a", "b", 1, "abc123", &at("f.rs", 3), " ")
+            .is_err());
+        assert!(api.reply_review_comment("a", "b", 1, 7, " ").is_err());
+    }
+
+    #[test]
+    fn review_comments_are_read_with_their_line_side_and_parent() {
+        let v = json!({"id": 5, "user": {"login": "ana"}, "body": "hmm", "path": "src/a.rs",
+            "line": null, "original_line": 12, "side": "LEFT", "in_reply_to_id": 3,
+            "created_at": "2026-01-01T00:00:00Z"});
+        let c = ReviewComment::parse(&v);
+        assert_eq!((c.id, c.line, c.reply_to), (5, 12, Some(3)));
+        assert_eq!((c.author.as_str(), c.side.as_str()), ("ana", "LEFT"));
+        let empty = ReviewComment::parse(&json!({}));
+        assert_eq!((empty.id, empty.line, empty.side.as_str()), (0, 0, "RIGHT"));
     }
 
     #[test]

@@ -247,6 +247,7 @@ pub enum Category {
     Run,
     Git,
     GitHub,
+    Assistant,
     Nodalia,
     Help,
 }
@@ -263,6 +264,7 @@ impl Category {
             Category::Run => "Run",
             Category::Git => "Git",
             Category::GitHub => "GitHub",
+            Category::Assistant => "Assistant",
             Category::Nodalia => "Nodalia",
             Category::Help => "Help",
         }
@@ -383,12 +385,26 @@ commands! {
     GitPush => ("git.push", "Push", Git, NONE),
     GitFetch => ("git.fetch", "Fetch", Git, NONE),
     GitSwitchBranch => ("git.switchBranch", "Switch or create a branch…", Git, NONE),
+    GitMerge => ("git.merge", "Merge a branch into this one…", Git, NONE),
+    GitMergeAbort => ("git.mergeAbort", "Abort the merge", Git, NONE),
+    GitStash => ("git.stash", "Stash the changes", Git, NONE),
+    GitStashPop => ("git.stashPop", "Apply the latest stash and remove it", Git, NONE),
+    GitToggleBlame => ("git.toggleBlame", "Show who changed each line", Git, ctrl_alt(Key::B)),
     CloneRepository => ("github.clone", "Clone a repository…", GitHub, NONE),
     GitHubShow => ("github.show", "Show GitHub pull requests and issues", GitHub, ctrl_shift(Key::H)),
     GitHubSignIn => ("github.signIn", "Sign in to GitHub…", GitHub, NONE),
     GitHubSignInCli => ("github.signInCli", "Sign in with the GitHub CLI", GitHub, NONE),
     GitHubSignOut => ("github.signOut", "Sign out of GitHub", GitHub, NONE),
     GitHubRefresh => ("github.refresh", "Refresh GitHub", GitHub, NONE),
+    GitHubCreatePull => ("github.createPull", "Create a pull request…", GitHub, NONE),
+
+    AiShow => ("ai.show", "Show the assistant", Assistant, ctrl_alt(Key::I)),
+    AiExplain => ("ai.explain", "Explain this code", Assistant, NONE),
+    AiFix => ("ai.fix", "Fix this code", Assistant, NONE),
+    AiRefactor => ("ai.refactor", "Refactor this code", Assistant, NONE),
+    AiDocument => ("ai.document", "Document this code", Assistant, NONE),
+    AiTest => ("ai.test", "Write tests for this code", Assistant, NONE),
+    AiSettings => ("ai.settings", "Assistant settings…", Assistant, NONE),
 
     NewNodaliaApp => ("nodalia.newApp", "New Nodalia app…", Nodalia, NONE),
 

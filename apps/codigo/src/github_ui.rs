@@ -14,8 +14,8 @@ use std::time::Duration;
 use codigo_git::Auth;
 use codigo_github::device::{self, DeviceCode, Poll};
 use codigo_github::{
-    secret, Api, Check, Comment, CommentKind, Issue, Pull, PullDetail, PullFile, RepoInfo,
-    ReviewEvent, Scope, User,
+    diff_lines, secret, Api, Check, Comment, CommentKind, DiffKind, DiffLine, Issue, LinePlace,
+    NewPull, Pull, PullDetail, PullFile, RepoInfo, ReviewComment, ReviewEvent, Scope, User,
 };
 use egui::{Align, Align2, FontId, Layout, RichText, ScrollArea, Ui};
 use nodalia_theme::creator::{self as cr, Look};
@@ -25,7 +25,7 @@ use nodalia_theme::for_egui::color;
 use crate::app::{App, Msg, Panel};
 use crate::i18n::{tr, trf};
 use crate::overlays::{heading, modal, Overlay, Shown};
-use crate::vcs_ui::{diff_text, section};
+use crate::vcs_ui::section;
 use crate::widgets::small_icon_button;
 
 /// The id of the OAuth app that device sign-in uses. It is not a secret, and Código never ships
@@ -155,6 +155,10 @@ pub enum GhMsg {
         result: Result<(), String>,
     },
     Cloned(Result<PathBuf, String>),
+    /// The branch a repository merges into by default.
+    DefaultBranch(Result<String, String>),
+    /// The pull request that was just created, or why not.
+    PullCreated(Result<Box<Pull>, String>),
 }
 
 /// What a pull request or issue window loads beyond what the list already had.
@@ -164,6 +168,8 @@ pub struct Loaded {
     pub files: Vec<PullFile>,
     pub conversation: Vec<Comment>,
     pub checks: Vec<Check>,
+    /// Comments left on lines of the diff.
+    pub review_comments: Vec<ReviewComment>,
 }
 
 /// The window of one pull request or issue.
@@ -186,6 +192,15 @@ pub struct ItemView {
     /// The file whose diff is open.
     pub file: Option<usize>,
     pub busy: bool,
+    /// The diff line a review comment is being written on: file, line and whether it is the
+    /// old side.
+    pub pick: Option<(String, u64, bool)>,
+    /// The review comment being written.
+    pub inline: String,
+    /// The comment on the diff that the one being written answers.
+    pub reply_to: Option<u64>,
+    /// The parsed patch of the file whose diff is open.
+    pub parsed: Option<(usize, std::rc::Rc<Vec<DiffLine>>)>,
 }
 
 impl ItemView {
@@ -208,6 +223,10 @@ impl ItemView {
             comment: String::new(),
             file: None,
             busy: false,
+            pick: None,
+            inline: String::new(),
+            reply_to: None,
+            parsed: None,
         }
     }
 
@@ -230,6 +249,10 @@ impl ItemView {
             comment: String::new(),
             file: None,
             busy: false,
+            pick: None,
+            inline: String::new(),
+            reply_to: None,
+            parsed: None,
         }
     }
 }
@@ -548,6 +571,8 @@ fn load_detail(app: &App, repo: &str, number: u64, is_pull: bool, sha: String) {
                     .filter(|s| !s.is_empty())
                     .unwrap_or(sha);
                 loaded.checks = api.checks(owner, name, &sha).unwrap_or_default();
+                loaded.review_comments =
+                    api.review_comments(owner, name, number).unwrap_or_default();
             }
             loaded.conversation = api
                 .conversation(owner, name, number, is_pull)
@@ -692,6 +717,8 @@ pub fn on_msg(app: &mut App, msg: GhMsg) {
                     v.busy = false;
                     if result.is_ok() {
                         v.comment.clear();
+                        v.inline.clear();
+                        v.reply_to = None;
                         reload = Some((v.is_pull, v.head_sha.clone()));
                     }
                 }
@@ -707,6 +734,35 @@ pub fn on_msg(app: &mut App, msg: GhMsg) {
                 Err(e) => app.toast(e),
             }
         }
+        GhMsg::DefaultBranch(result) => {
+            if let Overlay::NewPull(n) = &mut app.overlay {
+                match result {
+                    Ok(branch) => {
+                        if n.base.is_empty() {
+                            n.base = branch;
+                        }
+                    }
+                    Err(e) => n.error = Some(first_line(&e)),
+                }
+            }
+        }
+        GhMsg::PullCreated(result) => match result {
+            Ok(pull) => {
+                app.toast(trf(
+                    "Created pull request #{}.",
+                    &[&pull.number.to_string()],
+                ));
+                app.gh.pulls = Slot::default();
+                open_pull(app, &pull);
+                ensure(app);
+            }
+            Err(e) => {
+                if let Overlay::NewPull(n) = &mut app.overlay {
+                    n.busy = false;
+                    n.error = Some(first_line(&e));
+                }
+            }
+        },
         GhMsg::Cloned(result) => match result {
             Ok(path) => {
                 app.overlay = Overlay::None;
@@ -771,6 +827,48 @@ fn post_review(app: &mut App, repo: String, number: u64, event: ReviewEvent, bod
         };
         GhMsg::Posted {
             what,
+            repo,
+            number,
+            result,
+        }
+    });
+}
+
+/// Comment on a line of the diff, or answer a comment there.
+fn post_inline(app: &mut App, view: &ItemView, body: String) {
+    let Some(api) = api(app) else {
+        return;
+    };
+    let (repo, number, sha) = (view.repo.clone(), view.number, view.head_sha.clone());
+    let (pick, reply_to) = (view.pick.clone(), view.reply_to);
+    spawn(app, move || {
+        let result = (|| {
+            let (owner, name) = repo
+                .split_once('/')
+                .ok_or_else(|| "not a repository".to_owned())?;
+            match (reply_to, pick) {
+                (Some(to), _) => api
+                    .reply_review_comment(owner, name, number, to, &body)
+                    .map_err(text),
+                (None, Some((path, line, left))) => api
+                    .add_review_comment(
+                        owner,
+                        name,
+                        number,
+                        &sha,
+                        &LinePlace {
+                            path: &path,
+                            line,
+                            left,
+                        },
+                        &body,
+                    )
+                    .map_err(text),
+                (None, None) => Err("choose a line of the diff".to_owned()),
+            }
+        })();
+        GhMsg::Posted {
+            what: "Comment posted.",
             repo,
             number,
             result,
@@ -1188,6 +1286,7 @@ pub fn item_overlay(
     let mut closed = false;
     let mut post: Option<(&'static str, ReviewEvent)> = None;
     let mut comment = false;
+    let mut inline_post: Option<String> = None;
     let mut browser = false;
     let mut checkout = false;
     let same_repo = app
@@ -1291,7 +1390,8 @@ pub fn item_overlay(
                         .wrap(),
                     );
                 }
-                match &view.loaded {
+                let loaded = view.loaded.take();
+                match &loaded {
                     None => {
                         ui.add_space(8.0);
                         ui.label(RichText::new(tr("Loading…")).color(color(p.text_secondary)));
@@ -1312,7 +1412,19 @@ pub fn item_overlay(
                                 }
                                 if on {
                                     match &f.patch {
-                                        Some(patch) => diff_text(ui, look, patch, 360.0),
+                                        Some(patch) => {
+                                            if let Some(body) = review_diff(
+                                                ui,
+                                                look,
+                                                &mut view,
+                                                i,
+                                                &f.filename,
+                                                patch,
+                                                &l.review_comments,
+                                            ) {
+                                                inline_post = Some(body);
+                                            }
+                                        }
                                         None => {
                                             ui.label(
                                                 RichText::new(tr(
@@ -1354,6 +1466,7 @@ pub fn item_overlay(
                         }
                     }
                 }
+                view.loaded = loaded;
             });
         ui.add_space(8.0);
         let box_response = cr::field_frame(look)
@@ -1401,6 +1514,10 @@ pub fn item_overlay(
     if browser {
         ctx.open_url(egui::OpenUrl::new_tab(view.url.clone()));
     }
+    if let Some(body) = inline_post {
+        view.busy = true;
+        post_inline(app, &view, body);
+    }
     if comment {
         view.busy = true;
         post_comment(app, view.repo.clone(), view.number, view.comment.clone());
@@ -1423,6 +1540,327 @@ pub fn item_overlay(
         return (Overlay::None, true);
     }
     (Overlay::Item(view), false)
+}
+
+/// The diff of one file with a number beside each line. Click a line to comment on it; lines
+/// that already have comments carry a dot, and the comments of the chosen line show below.
+/// Returns the text of a review comment the person asked to post.
+fn review_diff(
+    ui: &mut Ui,
+    look: &Look,
+    view: &mut ItemView,
+    index: usize,
+    path: &str,
+    patch: &str,
+    comments: &[ReviewComment],
+) -> Option<String> {
+    let p = look.palette;
+    let lines = match &view.parsed {
+        Some((i, lines)) if *i == index => lines.clone(),
+        _ => {
+            let parsed: Vec<DiffLine> = diff_lines(patch).into_iter().take(20_000).collect();
+            let lines = std::rc::Rc::new(parsed);
+            view.parsed = Some((index, lines.clone()));
+            lines
+        }
+    };
+    let here: Vec<&ReviewComment> = comments.iter().filter(|c| c.path == path).collect();
+    let has = |line: u64, left: bool| {
+        here.iter()
+            .any(|c| c.line == line && (c.side == "LEFT") == left)
+    };
+    let font = FontId::monospace(font_size::SMALL);
+    let row = ui.fonts_mut(|f| f.row_height(&font)).max(18.0);
+    let mut picked: Option<(u64, bool)> = None;
+    ScrollArea::both()
+        .id_salt(("pr-diff", index))
+        .max_height(360.0)
+        .auto_shrink([false, true])
+        .show_rows(ui, row, lines.len(), |ui, range| {
+            for i in range {
+                let Some(line) = lines.get(i) else { continue };
+                let place = line.place();
+                let commented = place.is_some_and(|(n, left)| has(n, left));
+                let chosen = place.is_some_and(|(n, left)| {
+                    view.pick
+                        .as_ref()
+                        .is_some_and(|(f, pn, pl)| f == path && *pn == n && *pl == left)
+                });
+                let tint = match line.kind {
+                    DiffKind::Added => color(p.status_success_fg),
+                    DiffKind::Removed => color(p.status_danger_fg),
+                    DiffKind::Hunk => color(p.status_info_fg),
+                    _ => color(p.text_secondary),
+                };
+                let number = |n: Option<u64>| n.map_or("    ".to_owned(), |n| format!("{n:>4}"));
+                let text = format!(
+                    "{} {} {} {}",
+                    if commented { "●" } else { " " },
+                    number(line.old),
+                    number(line.new),
+                    line.text
+                );
+                let mut rich = RichText::new(text).font(font.clone()).color(tint);
+                if chosen {
+                    rich = rich.strong().background_color(color(p.control_bg));
+                }
+                let response = ui.add(egui::Label::new(rich).extend().sense(if place.is_some() {
+                    egui::Sense::click()
+                } else {
+                    egui::Sense::hover()
+                }));
+                if response.clicked() {
+                    picked = place;
+                }
+                if place.is_some() {
+                    response.on_hover_text(tr("Click to comment on this line"));
+                }
+            }
+        });
+    if let Some((line, left)) = picked {
+        view.pick = Some((path.to_owned(), line, left));
+        view.reply_to = None;
+    }
+    let mut out = None;
+    let (pick_path, line, left) = view.pick.clone()?;
+    if pick_path != path {
+        return None;
+    }
+    ui.add_space(6.0);
+    ui.label(
+        RichText::new(trf(
+            if left {
+                "Line {} (before the change)"
+            } else {
+                "Line {}"
+            },
+            &[&line.to_string()],
+        ))
+        .strong()
+        .size(font_size::SMALL)
+        .color(color(p.text_secondary)),
+    );
+    for c in here
+        .iter()
+        .filter(|c| c.line == line && (c.side == "LEFT") == left)
+    {
+        ui.label(
+            RichText::new(format!("{} · {}", c.author, date(&c.created_at)))
+                .size(font_size::SMALL)
+                .strong()
+                .color(color(p.text_secondary)),
+        );
+        ui.add(
+            egui::Label::new(RichText::new(clip(&c.body, 4000)).color(color(p.text_primary)))
+                .wrap(),
+        );
+        if c.reply_to.is_none() && ui.small_button(tr("Reply")).clicked() {
+            view.reply_to = Some(c.id);
+        }
+    }
+    cr::field_frame(look)
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut view.inline)
+                    .frame(egui::Frame::NONE)
+                    .hint_text(if view.reply_to.is_some() {
+                        tr("Write a reply…")
+                    } else {
+                        tr("Comment on this line…")
+                    })
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY)
+                    .font(FontId::proportional(font_size::BODY)),
+            )
+        });
+    ui.horizontal(|ui| {
+        let ready = !view.inline.trim().is_empty() && !view.busy;
+        let label = if view.reply_to.is_some() {
+            tr("Reply")
+        } else {
+            tr("Comment on the line")
+        };
+        if cr::primary_button(ui, look, label, ready).clicked() {
+            out = Some(view.inline.clone());
+        }
+        if view.reply_to.is_some() && ui.small_button(tr("Start a new thread")).clicked() {
+            view.reply_to = None;
+        }
+    });
+    out
+}
+
+/// Opening a pull request from the branch that is checked out.
+pub struct PullSetup {
+    pub title: String,
+    pub body: String,
+    pub head: String,
+    pub base: String,
+    pub draft: bool,
+    pub focus: bool,
+    pub busy: bool,
+    pub error: Option<String>,
+}
+
+/// Start a pull request for the current branch: the repository must be on GitHub, the person
+/// signed in and on a branch.
+pub fn open_create_pull(app: &mut App) {
+    init(app);
+    let Some((owner, name)) = app.gh.repo.clone() else {
+        app.toast(tr("This folder is not a GitHub repository."));
+        return;
+    };
+    let Some(api) = api(app) else {
+        app.toast(tr("Sign in to GitHub first."));
+        return;
+    };
+    let Some(branch) = app.vcs.status.as_ref().and_then(|s| s.branch.clone()) else {
+        app.toast(tr("Switch to a branch first."));
+        return;
+    };
+    let title = app
+        .vcs
+        .log
+        .first()
+        .map(|c| c.subject.clone())
+        .unwrap_or_default();
+    app.overlay = Overlay::NewPull(PullSetup {
+        title,
+        body: String::new(),
+        head: branch,
+        base: String::new(),
+        draft: false,
+        focus: true,
+        busy: false,
+        error: None,
+    });
+    spawn(app, move || {
+        GhMsg::DefaultBranch(api.default_branch(&owner, &name).map_err(text))
+    });
+}
+
+fn create_pull(app: &mut App, setup: &PullSetup) {
+    let (Some(api), Some((owner, name)), Some(root)) =
+        (api(app), app.gh.repo.clone(), app.vcs.root.clone())
+    else {
+        return;
+    };
+    let auth = vcs_auth(app);
+    let (title, body, head, base, draft) = (
+        setup.title.clone(),
+        setup.body.clone(),
+        setup.head.clone(),
+        setup.base.clone(),
+        setup.draft,
+    );
+    spawn(app, move || {
+        let result = (|| {
+            let repo = codigo_git::Repo::discover(&root)
+                .ok_or_else(|| "this folder is not a git repository".to_owned())?;
+            // The branch has to be on GitHub before a pull request can name it.
+            repo.push(&auth).map_err(|e| e.to_string())?;
+            api.create_pull(
+                &owner,
+                &name,
+                &NewPull {
+                    title: &title,
+                    body: &body,
+                    head: &head,
+                    base: &base,
+                    draft,
+                },
+            )
+            .map(Box::new)
+            .map_err(text)
+        })();
+        GhMsg::PullCreated(result)
+    });
+}
+
+fn vcs_auth(app: &App) -> Auth {
+    crate::vcs_ui::auth(app)
+}
+
+pub fn pull_overlay(
+    ctx: &egui::Context,
+    app: &mut App,
+    look: &Look,
+    mut state: PullSetup,
+) -> Shown {
+    let p = look.palette;
+    let mut closed = false;
+    let mut go = false;
+    let dismissed = modal(ctx, look, "create-pull", 620.0, true, |ui| {
+        closed = heading(ui, look, tr("Create a pull request"), "create-pull");
+        ui.label(
+            RichText::new(trf("{} into {}", &[&state.head, &state.base]))
+                .monospace()
+                .size(font_size::SMALL)
+                .color(color(p.text_secondary)),
+        );
+        ui.add_space(8.0);
+        let response = cr::field_frame(look)
+            .inner_margin(egui::Margin::symmetric(10, 4))
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut state.title)
+                        .frame(egui::Frame::NONE)
+                        .hint_text(tr("Title"))
+                        .align(Align2::LEFT_CENTER)
+                        .desired_width(f32::INFINITY)
+                        .font(FontId::proportional(font_size::LARGE)),
+                )
+            })
+            .inner;
+        if state.focus {
+            response.request_focus();
+            state.focus = false;
+        }
+        ui.add_space(6.0);
+        cr::field_frame(look)
+            .inner_margin(egui::Margin::symmetric(8, 6))
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut state.body)
+                        .frame(egui::Frame::NONE)
+                        .hint_text(tr("Describe the change"))
+                        .desired_rows(6)
+                        .desired_width(f32::INFINITY)
+                        .font(FontId::proportional(font_size::BODY)),
+                )
+            });
+        ui.add_space(6.0);
+        ui.checkbox(&mut state.draft, tr("Open as a draft"));
+        ui.label(
+            RichText::new(tr("The branch is pushed to GitHub first."))
+                .size(font_size::SMALL)
+                .color(color(p.text_secondary)),
+        );
+        if let Some(e) = &state.error {
+            ui.add_space(6.0);
+            ui.label(RichText::new(e).color(color(p.status_danger_fg)));
+        }
+        ui.add_space(10.0);
+        let ready = !state.busy && !state.title.trim().is_empty() && !state.base.is_empty();
+        let label = if state.busy {
+            tr("Creating…")
+        } else {
+            tr("Create pull request")
+        };
+        if cr::primary_button(ui, look, label, ready).clicked() {
+            go = true;
+        }
+    });
+    if go {
+        state.busy = true;
+        state.error = None;
+        create_pull(app, &state);
+    }
+    if closed || dismissed {
+        return (Overlay::None, true);
+    }
+    (Overlay::NewPull(state), false)
 }
 
 /// At most `max` characters of a text, cut on a character boundary.
