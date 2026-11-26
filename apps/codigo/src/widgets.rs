@@ -68,10 +68,56 @@ fn paint_icon_button(
     } else {
         color(p.text_secondary)
     };
-    if let Some(i) = icons::get(name) {
-        let inset = (rect.width() * 0.22).round();
-        icons::paint(ui.painter(), rect.shrink(inset), i, icons::Style::bold(ink));
+    let inset = (rect.width() * 0.22).round();
+    paint_named(ui.painter(), rect.shrink(inset), name, ink);
+}
+
+/// Paint an icon by name: the Nodalia set, or one of the few drawn in `glyphs`.
+pub fn paint_named(painter: &egui::Painter, rect: egui::Rect, name: &str, ink: Color32) {
+    use crate::glyphs::{self, Glyph};
+    let glyph = match name {
+        "bug" => Some(Glyph::Bug),
+        "step-over" => Some(Glyph::StepOver),
+        "step-out" => Some(Glyph::StepOut),
+        _ => None,
+    };
+    if let Some(g) = glyph {
+        glyphs::paint(painter, rect, g, ink);
+    } else if let Some(i) = icons::get(name) {
+        icons::paint(painter, rect, i, icons::Style::bold(ink));
     }
+}
+
+/// A round button of the top bar's action cluster: tinted when it can be used, grey when not.
+/// Returns true when it was clicked while enabled.
+pub fn tool_button(
+    ui: &mut Ui,
+    look: &Look,
+    name: &str,
+    label: &str,
+    hint: &str,
+    enabled: bool,
+    tint: Color32,
+) -> bool {
+    let p = &look.palette;
+    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+    if enabled && response.hovered() {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(14), color(p.control_bg_hover));
+    }
+    let ink = if enabled {
+        tint
+    } else {
+        color(p.text_tertiary)
+    };
+    paint_named(
+        ui.painter(),
+        egui::Rect::from_center_size(rect.center(), vec2(15.0, 15.0)),
+        name,
+        ink,
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, label));
+    response.on_hover_text(hint).clicked() && enabled
 }
 
 /// A small text toggle such as "Aa" or ".*": pressed it wears the accent.

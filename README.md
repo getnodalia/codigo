@@ -30,6 +30,15 @@ Design Language and written entirely in Rust. It does not run on Electron, Chrom
   (`cargo run`, `npm start`, `go run .`, `python main.py` and more, chosen from what the folder
   contains) in a tab of its own, and Build, Test and Check are in the Run menu. A
   `path:line:column` in the output is a link: click it to open that place.
+- **A debugger.** The bug button next to Run (`F6`) builds the project and runs it under a
+  debugger through the Debug Adapter Protocol: `lldb-dap` or GDB 14+ for Rust, C and C++, `dlv` for
+  Go and `debugpy` for Python (the last two are not tried against a real session yet). Click the
+  margin of the editor (or `F9`) to set breakpoints; when the program stops, the line is
+  highlighted and the Debug panel shows the call stack, the variables (click to open them), an
+  expression field and the program's output. Continue (`F8`), step over (`F10`), into (`F11`),
+  out (`Shift+F11`) and Stop (`Shift+F6`) are in the top bar and the Run menu. Código installs no
+  debugger: when one is missing it says which to install. Conditional breakpoints and persistent
+  watches are not there yet.
 - **Code quality and security, built in.** The Quality tab (`Ctrl+Shift+Y`) analyses the folder
   with no server to run and nothing leaving your computer: hard-coded secrets (private keys,
   cloud tokens, passwords), unsafe patterns (`eval`, shell commands from strings, SQL built from

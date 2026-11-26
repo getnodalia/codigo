@@ -33,6 +33,8 @@ pub enum Msg {
     /// A file's changed lines against git, for the gutter.
     Marks(PathBuf, Vec<ws::LineChange>),
     Quality(u64, codigo_quality::Report),
+    /// The program to debug was built and a debugger found, or why not.
+    DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
 }
 
 pub struct Tab {
@@ -51,6 +53,7 @@ pub enum Panel {
     Search,
     Quality,
     Problems,
+    Debug,
 }
 
 /// The find bar's state.
@@ -144,6 +147,8 @@ pub struct App {
     pub lsp: Hub,
     /// The terminal panel and the run console.
     pub term: crate::terminal_ui::TermPanel,
+    /// The debugger: breakpoints, and the session when there is one.
+    pub debug: crate::debug_ui::DebugPanel,
     /// A language-server question waiting for its answer.
     pub query: Option<crate::lsp_ui::InFlight>,
     /// The hover or completion popup next to the caret.
@@ -202,6 +207,7 @@ impl App {
             project: None,
             lsp,
             term: crate::terminal_ui::TermPanel::default(),
+            debug: crate::debug_ui::DebugPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
             panel: Panel::Explorer,
@@ -284,6 +290,14 @@ impl App {
             Appearance::Light => for_egui::apply(ctx, &appearance(false)),
             Appearance::Dark => for_egui::apply(ctx, &appearance(true)),
         }
+    }
+
+    pub fn sender(&self) -> Sender<Msg> {
+        self.tx.clone()
+    }
+
+    pub fn egui_ctx(&self) -> &egui::Context {
+        &self.ctx
     }
 
     pub fn toast(&mut self, text: impl Into<String>) {
@@ -736,6 +750,7 @@ impl App {
         if let Some(p) = self.project.as_mut() {
             p.explorer.poll();
         }
+        crate::debug_ui::poll(self);
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Files(root, files) => {
@@ -761,6 +776,7 @@ impl App {
                         self.quality.report = Some(report);
                     }
                 }
+                Msg::DebugSpec(serial, spec) => crate::debug_ui::launch(self, serial, spec),
                 Msg::Search(serial, result) => {
                     if serial == self.psearch.serial {
                         self.psearch.running = false;
@@ -990,6 +1006,17 @@ impl App {
             TestProject => crate::terminal_ui::run_task(self, ctx, codigo_engine::TaskKind::Test),
             CheckProject => crate::terminal_ui::run_task(self, ctx, codigo_engine::TaskKind::Check),
             StopRun => crate::terminal_ui::stop(self),
+            StartDebugging => crate::debug_ui::start(self),
+            StopDebugging => crate::debug_ui::stop(self),
+            DebugContinue => self.debug.resume(codigo_dap::Command::Continue),
+            DebugStepOver => self.debug.resume(codigo_dap::Command::StepOver),
+            DebugStepInto => self.debug.resume(codigo_dap::Command::StepInto),
+            DebugStepOut => self.debug.resume(codigo_dap::Command::StepOut),
+            ToggleBreakpoint => crate::debug_ui::toggle_at_caret(self),
+            ShowDebug => {
+                self.sidebar_visible = true;
+                self.panel = Panel::Debug;
+            }
             NextTab => {
                 if !self.tabs.is_empty() {
                     self.active = (self.active + 1) % self.tabs.len();
@@ -1352,6 +1379,17 @@ impl App {
             self.last_edit = Some(Instant::now());
         }
         crate::lsp_ui::update(self, out.edited);
+        if let Some(line) = out.gutter_click {
+            if let Some(path) = self
+                .tabs
+                .get(self.active)
+                .and_then(|t| t.doc.path().map(Path::to_path_buf))
+            {
+                self.debug.toggle(&path, line);
+            } else {
+                self.toast(tr("Save the file first to set a breakpoint in it."));
+            }
+        }
         for cmd in out.commands {
             self.run(ctx, cmd);
         }

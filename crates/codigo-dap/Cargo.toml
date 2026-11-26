@@ -1,0 +1,23 @@
+[package]
+name = "codigo-dap"
+description = "Código's debugger: a Debug Adapter Protocol client, the adapters it knows and a session that runs on its own thread."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+codigo-lsp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

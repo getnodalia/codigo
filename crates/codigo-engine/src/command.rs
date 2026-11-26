@@ -349,6 +349,7 @@ commands! {
     ZoomReset => ("view.zoomReset", "Reset zoom", View, ctrl(Key::Num0)),
     FocusEditor => ("view.focusEditor", "Focus editor", View, NONE),
     FocusExplorer => ("view.focusExplorer", "Focus explorer", View, ctrl_shift(Key::E)),
+    ShowDebug => ("view.debug", "Show the debugger", View, ctrl_shift(Key::D)),
     ShowProblems => ("view.problems", "Show the problems", View, ctrl_shift(Key::M)),
     ChangeLanguage => ("view.changeLanguage", "Change language mode…", View, NONE),
 
@@ -357,6 +358,13 @@ commands! {
     TestProject => ("run.test", "Run the tests", Run, NONE),
     CheckProject => ("run.check", "Check the code", Run, NONE),
     StopRun => ("run.stop", "Stop the running program", Run, shift(Key::F5)),
+    StartDebugging => ("debug.start", "Start debugging", Run, plain(Key::F6)),
+    StopDebugging => ("debug.stop", "Stop debugging", Run, shift(Key::F6)),
+    DebugContinue => ("debug.continue", "Continue", Run, plain(Key::F8)),
+    DebugStepOver => ("debug.stepOver", "Step over", Run, plain(Key::F10)),
+    DebugStepInto => ("debug.stepInto", "Step into", Run, plain(Key::F11)),
+    DebugStepOut => ("debug.stepOut", "Step out", Run, shift(Key::F11)),
+    ToggleBreakpoint => ("debug.toggleBreakpoint", "Toggle breakpoint", Run, plain(Key::F9)),
     AnalyzeProject => ("quality.analyze", "Analyze the code quality and security", Run, ctrl_shift(Key::Y)),
 
     NewNodaliaApp => ("nodalia.newApp", "New Nodalia app…", Nodalia, NONE),

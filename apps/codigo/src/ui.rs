@@ -343,62 +343,48 @@ fn top_bar(
 
 /// The buttons that run things: run, stop, and the panels you want one click away.
 fn actions(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
+    use crate::widgets::tool_button;
     let p = &look.palette;
     ui.spacing_mut().item_spacing.x = 2.0;
     let has_project = app.project.is_some();
     let running = crate::terminal_ui::task_running(app);
-    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
-    let enabled = has_project && !running;
-    if enabled && response.hovered() {
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(14), color(p.control_bg_hover));
-    }
-    if let Some(i) = nodalia_theme::icons::get("play") {
-        let ink = if enabled {
-            color(p.status_success_fg)
-        } else {
-            color(p.text_tertiary)
-        };
-        nodalia_theme::icons::paint(
-            ui.painter(),
-            Rect::from_center_size(rect.center(), vec2(15.0, 15.0)),
-            i,
-            nodalia_theme::icons::Style::bold(ink),
-        );
-    }
-    let run_hint = Cmd::RunProject
-        .shortcut()
-        .map(|s| format!("{}  ({})", tr(Cmd::RunProject.label()), shortcut_label(&s)))
-        .unwrap_or_default();
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::Role::Button, enabled, tr(Cmd::RunProject.label()))
-    });
-    if response.on_hover_text(run_hint).clicked() && enabled {
-        acts.push(Act::Run(Cmd::RunProject));
-    }
-    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
-    if running && response.hovered() {
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(14), color(p.control_bg_hover));
-    }
-    if let Some(i) = nodalia_theme::icons::get("stop") {
-        let ink = if running {
-            color(p.status_danger_fg)
-        } else {
-            color(p.text_tertiary)
-        };
-        nodalia_theme::icons::paint(
-            ui.painter(),
-            Rect::from_center_size(rect.center(), vec2(15.0, 15.0)),
-            i,
-            nodalia_theme::icons::Style::bold(ink),
-        );
-    }
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::Role::Button, running, tr(Cmd::StopRun.label()))
-    });
-    if response.on_hover_text(tr(Cmd::StopRun.label())).clicked() && running {
-        acts.push(Act::Run(Cmd::StopRun));
+    let debugging = app.debug.active();
+    let stopped = app.debug.phase == crate::debug_ui::Phase::Stopped;
+    let hint = |cmd: Cmd| {
+        cmd.shortcut()
+            .map(|s| format!("{}  ({})", tr(cmd.label()), shortcut_label(&s)))
+            .unwrap_or_else(|| tr(cmd.label()).to_string())
+    };
+    let go = color(p.status_success_fg);
+    let stop = color(p.status_danger_fg);
+    let step = color(p.accent_text);
+    let mut act = |cmd: Cmd, name: &str, enabled: bool, tint: egui::Color32, ui: &mut Ui| {
+        if tool_button(ui, look, name, tr(cmd.label()), &hint(cmd), enabled, tint) {
+            acts.push(Act::Run(cmd));
+        }
+    };
+    act(
+        Cmd::RunProject,
+        "play",
+        has_project && !running && !debugging,
+        go,
+        ui,
+    );
+    act(
+        Cmd::StartDebugging,
+        "bug",
+        has_project && !running && !debugging,
+        go,
+        ui,
+    );
+    if debugging {
+        act(Cmd::DebugContinue, "play", stopped, go, ui);
+        act(Cmd::DebugStepOver, "step-over", stopped, step, ui);
+        act(Cmd::DebugStepInto, "step-into", stopped, step, ui);
+        act(Cmd::DebugStepOut, "step-out", stopped, step, ui);
+        act(Cmd::StopDebugging, "stop", true, stop, ui);
+    } else {
+        act(Cmd::StopRun, "stop", running, stop, ui);
     }
     ui.add_space(6.0);
     if icon_button(
@@ -472,6 +458,7 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
             (Panel::Search, "search", tr("Search")),
             (Panel::Quality, "shield-check", tr("Quality")),
             (Panel::Problems, "warning", tr("Problems")),
+            (Panel::Debug, "bug", tr("Debug")),
         ] {
             if icon_button(ui, look, glyph, label, app.panel == panel).clicked() {
                 acts.push(Act::Panel(panel));
@@ -491,6 +478,7 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
                 Panel::Explorer | Panel::Search => tr("Search"),
                 Panel::Quality => tr("Quality"),
                 Panel::Problems => tr("Problems"),
+                Panel::Debug => tr("Debug"),
             })
             .strong()
             .size(font_size::SMALL)
@@ -503,6 +491,11 @@ fn sidebar(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         Panel::Search => search_panel(ui, app, look, acts),
         Panel::Problems => {
             if let Some((path, line)) = crate::problems_ui::panel(ui, app, look) {
+                acts.push(Act::OpenAt { path, line });
+            }
+        }
+        Panel::Debug => {
+            if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {
                 acts.push(Act::OpenAt { path, line });
             }
         }
@@ -879,7 +872,9 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     let rect = ui.available_rect_before_wrap();
     let active = app.active;
     let output = {
-        let App { tabs, find, .. } = app;
+        let App {
+            tabs, find, debug, ..
+        } = app;
         let matcher = if find.open {
             find.matcher.as_ref()
         } else {
@@ -888,6 +883,16 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         let Some(tab) = tabs.get_mut(active) else {
             return;
         };
+        match tab.doc.path() {
+            Some(path) => {
+                tab.view.breakpoints = debug.lines_of(path);
+                tab.view.exec_line = debug.exec_line(path);
+            }
+            None => {
+                tab.view.breakpoints.clear();
+                tab.view.exec_line = None;
+            }
+        }
         ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
             editor::show(
                 ui,

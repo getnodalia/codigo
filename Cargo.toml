@@ -6,6 +6,7 @@ members = [
     "crates/codigo-workspace",
     "crates/codigo-engine",
     "crates/codigo-lsp",
+    "crates/codigo-dap",
     "crates/codigo-term",
     "crates/codigo-quality",
     "crates/codigo-nodalia",
@@ -13,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.91"
 license = "MIT OR Apache-2.0"
@@ -26,6 +27,7 @@ codigo-syntax = { path = "crates/codigo-syntax" }
 codigo-workspace = { path = "crates/codigo-workspace" }
 codigo-engine = { path = "crates/codigo-engine" }
 codigo-lsp = { path = "crates/codigo-lsp" }
+codigo-dap = { path = "crates/codigo-dap" }
 codigo-term = { path = "crates/codigo-term" }
 codigo-quality = { path = "crates/codigo-quality" }
 codigo-nodalia = { path = "crates/codigo-nodalia" }
