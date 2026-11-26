@@ -53,6 +53,8 @@ pub struct Settings {
     pub auto_save_delay_ms: u64,
     /// Linux only: draw the desktop's own window controls instead of Nodalia's.
     pub native_window_controls: bool,
+    pub high_contrast: bool,
+    pub reduced_motion: bool,
     pub check_updates: bool,
     pub recent_projects: Vec<PathBuf>,
 }
@@ -73,6 +75,8 @@ impl Default for Settings {
             auto_save: AutoSave::Off,
             auto_save_delay_ms: 1000,
             native_window_controls: false,
+            high_contrast: false,
+            reduced_motion: false,
             check_updates: true,
             recent_projects: Vec::new(),
         }

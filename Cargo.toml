@@ -5,6 +5,7 @@ members = [
     "crates/codigo-syntax",
     "crates/codigo-workspace",
     "crates/codigo-engine",
+    "apps/codigo",
 ]
 
 [workspace.package]

@@ -161,6 +161,19 @@ impl Document {
         self.edit(|b| (f(b), ()));
     }
 
+    /// Run an operation that moves or selects and never edits text: clicks, arrows, selecting.
+    /// If it edits anyway, the syntax tree is rebuilt from scratch rather than left wrong.
+    pub fn navigate<R>(&mut self, f: impl FnOnce(&mut Buffer) -> R) -> R {
+        let revision = self.buffer.revision();
+        let out = f(&mut self.buffer);
+        if self.buffer.revision() != revision {
+            if let Some(s) = self.syntax.as_mut() {
+                s.reset();
+            }
+        }
+        out
+    }
+
     fn after_changes(&mut self, changes: &[Change]) {
         if changes.is_empty() {
             return;

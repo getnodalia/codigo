@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::paths::config_dir;
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionState {
     pub project: Option<PathBuf>,
@@ -18,6 +18,19 @@ pub struct SessionState {
     pub active: usize,
     pub sidebar_visible: bool,
     pub sidebar_width: f32,
+}
+
+impl Default for SessionState {
+    /// A first launch shows the sidebar at a comfortable width.
+    fn default() -> Self {
+        SessionState {
+            project: None,
+            tabs: Vec::new(),
+            active: 0,
+            sidebar_visible: true,
+            sidebar_width: 280.0,
+        }
+    }
 }
 
 impl SessionState {
@@ -98,6 +111,13 @@ mod tests {
         assert_eq!(back.tabs, vec![keep]);
         assert_eq!(back.active, 0);
         assert_eq!(back.sidebar_width, 640.0);
+    }
+
+    #[test]
+    fn a_fresh_start_shows_the_sidebar() {
+        let s = SessionState::default();
+        assert!(s.sidebar_visible);
+        assert_eq!(s.sidebar_width, 280.0);
     }
 
     #[test]
