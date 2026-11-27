@@ -94,6 +94,8 @@ Packages for Linux, macOS and Windows are on the
 [getnodalia.com/codigo](https://getnodalia.com/codigo). The macOS and Windows builds are not
 signed, so the system asks for confirmation the first time they open.
 
+[Nodalia Launcher](https://getnodalia.com/launcher) installs it and keeps it up to date too.
+
 | Platform | Files |
 |---|---|
 | Linux (x86-64) | `.AppImage`, `.deb`, `.rpm` and `.tar.gz` |
