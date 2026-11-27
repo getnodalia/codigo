@@ -658,7 +658,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-ai"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "keyring",
  "serde_json",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-app"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-ai",
  "codigo-dap",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-dap"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-lsp",
  "serde",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-engine"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-lsp",
  "codigo-syntax",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-git"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "tempfile",
  "thiserror 2.0.21",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-github"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "keyring",
  "serde_json",
@@ -748,7 +748,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-gitlab"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "keyring",
  "serde_json",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-lsp"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "serde",
  "serde_json",
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-nodalia"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "nodalia-theme",
  "tempfile",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-quality"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-syntax",
  "codigo-workspace",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-syntax"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-text",
  "ropey",
@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-term"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "portable-pty",
  "thiserror 2.0.21",
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-text"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "regex",
  "ropey",
@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "codigo-workspace"
-version = "0.9.0"
+version = "0.10.0-dev"
 dependencies = [
  "codigo-text",
  "ignore",
