@@ -1149,13 +1149,7 @@ pub fn item_overlay(
                 }
                 if !view.description.trim().is_empty() {
                     ui.add_space(8.0);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(clip(&view.description, 6000))
-                                .color(color(p.text_primary)),
-                        )
-                        .wrap(),
-                    );
+                    crate::markdown::show(ui, look, &clip(&view.description, 6000));
                 }
                 let loaded = view.loaded.take();
                 match &loaded {
@@ -1210,13 +1204,7 @@ pub fn item_overlay(
                                             .color(color(p.text_secondary)),
                                     );
                                 });
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(clip(&n.body, 3000))
-                                            .color(color(p.text_primary)),
-                                    )
-                                    .wrap(),
-                                );
+                                crate::markdown::show(ui, look, &clip(&n.body, 3000));
                                 ui.add_space(6.0);
                             }
                         }

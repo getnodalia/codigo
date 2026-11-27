@@ -35,6 +35,7 @@ png = "0.17"
 read-fonts = "0.41"
 sys-locale = "0.3"
 serde.workspace = true
+pulldown-cmark.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rfd = "0.17"

@@ -36,6 +36,7 @@ mod layout;
 #[cfg(target_os = "linux")]
 mod linux_menu;
 mod lsp_ui;
+mod markdown;
 mod menu;
 mod nodalia_ui;
 mod overlays;

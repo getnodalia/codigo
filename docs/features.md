@@ -62,7 +62,7 @@ service or tool, it says so.
   your computer, so your SSH keys and credential helper work as always.
 - **GitHub, in the window.** The GitHub panel (`Ctrl+Shift+H`) lists the open pull requests and
   issues of the repository you are in, the pull requests you opened or that wait for your review,
-  and your repositories. A pull request opens in its own window with its description, checks,
+  and your repositories. A pull request opens in its own window with its description (drawn as Markdown: headings, lists, task boxes, code, quotes, tables and links, with HTML comments hidden and images shown as links), checks,
   files and diffs and conversation, and you can comment, approve or request changes, or check its
   branch out. *Clone repository…* (on the welcome page and in the GitHub menu) takes an address or
   `owner/name` and opens the clone. Sign in with the GitHub CLI session or a personal access
