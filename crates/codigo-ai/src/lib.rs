@@ -16,6 +16,8 @@
 )]
 
 mod chat;
+pub mod context;
+pub mod edits;
 pub mod prompts;
 mod provider;
 pub mod secret;

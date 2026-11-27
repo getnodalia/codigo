@@ -105,15 +105,21 @@ service or tool, it says so.
   engineering rules: colours written in the code instead of taken from the tokens, interface text
   that skips `tr()`, strings missing from the `SPANISH` table, and files without a licence header.
   A theme and token preview and helpers for icons are not there yet.
-- **AI assistants, with your own key.** The Assistant panel (`Ctrl+Alt+I`) chats about the open
-  file or your selection, and *Explain*, *Fix*, *Refactor*, *Document* and *Write tests for this
-  code* in the Assistant menu send what is selected (or the file) with that instruction; when the
-  answer is a change, *Apply* puts it in the editor, where it can be undone. Pick Anthropic,
-  OpenAI, Ollama or any OpenAI-compatible address in *Assistant settings…*. Código ships no key
-  and no account: the key is kept in the system's keyring, is sent only to the provider's own
-  host (over https, or to your own computer) and never appears in an error, and nothing is sent
-  until you ask. Tried end to end against a local OpenAI-compatible server; the real Anthropic
-  and OpenAI services and the keyring have not been tried.
+- **AI assistants, with your own key.** The Assistant panel (`Ctrl+Alt+I`) sees what you are
+  working on: the open file (a window of up to 40,000 characters around the caret), the selection,
+  the open tabs and the project's file list, and `@name` in a question attaches that file. It
+  answers about your code and, when a change is needed, proposes it as a diff card per file
+  (*Change src/main.rs*, *New file src/util.rs*) with *Apply*, *Reject* and *Apply all*. A change to
+  an open file goes through the editor, so *Undo* brings the old code back; a new file is written
+  and opened. *Explain*, *Fix*, *Refactor*, *Document* and *Write tests for this code* in the
+  Assistant menu send the selection (or the file) with that instruction. A switch in Preferences
+  turns the context off. Pick Anthropic, OpenAI, Ollama or any OpenAI-compatible address in
+  *Assistant settings…*. Código ships no key and no account: the key is kept in the system's
+  keyring, is sent only to the provider's own host (over https, or to your own computer) and never
+  appears in an error, and nothing is sent until you ask. The proposals are plain text blocks the
+  model writes (it has no tools): a block whose old lines are not in the file, or appear twice, is
+  shown as failed and is not applied. Tried end to end against a local server that replies with
+  such blocks; the real Anthropic and OpenAI services and the keyring have not been tried.
 - **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
   the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
 - **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status

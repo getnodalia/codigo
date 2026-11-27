@@ -73,9 +73,10 @@ line icons in Código's green, and the suite's own window controls on Linux.
   SSH keys and credential helper work as always.
 - **Code quality and security, built in.** The Quality tab analyses the folder on your computer,
   with no server to run and nothing leaving it.
-- **AI assistants, with your own key.** Chat about the open file and explain, fix, refactor or
-  document a selection with Anthropic, OpenAI, Ollama or any OpenAI-compatible address. Código
-  ships no key and no account, and nothing is sent until you ask.
+- **AI assistants, with your own key.** An assistant that sees the open file, your selection and
+  the project, and proposes changes as a diff you accept or reject, with Anthropic, OpenAI, Ollama
+  or any OpenAI-compatible address. Código ships no key and no account, and nothing is sent until
+  you ask.
 - **Tools for building Nodalia apps.** *New Nodalia app* creates a Rust egui app in Nodalia Design,
   and the Quality tab also checks Nodalia's engineering rules in a folder that uses the theme.
 - **Projects and workspace.** A file explorer that respects `.gitignore`, quick open (`Ctrl+P`),
@@ -132,7 +133,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 | Git | Working |
 | GitLab | Sign-in error path tried against gitlab.com; lists, comments, approvals, merge request creation, the keyring and private clones not yet run against a real account |
 | GitHub | Status, diffs, staging, committing, cloning and public reads tried; reviews, the keyring and browser sign-in not yet run against a real account |
-| AI assistants | Tried against a local OpenAI-compatible server; the Anthropic and OpenAI services not yet |
+| AI assistants | Context and edit proposals tried against a local OpenAI-compatible server (Apply, undo, new file); the Anthropic and OpenAI services not yet |
 | App icon | Done: portrait of Alan Turing |
 | Nodalia interface | Done: Nodalia theme and icons, rounded islands, main menu, Nodalia window controls on Linux |
 | Global menu | Done on Linux (D-Bus), in the top bar of the shell |
