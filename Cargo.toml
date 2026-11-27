@@ -9,6 +9,7 @@ members = [
     "crates/codigo-dap",
     "crates/codigo-git",
     "crates/codigo-github",
+    "crates/codigo-gitlab",
     "crates/codigo-ai",
     "crates/codigo-term",
     "crates/codigo-quality",
@@ -17,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.91"
 license = "MIT OR Apache-2.0"
@@ -33,6 +34,7 @@ codigo-lsp = { path = "crates/codigo-lsp" }
 codigo-dap = { path = "crates/codigo-dap" }
 codigo-git = { path = "crates/codigo-git" }
 codigo-github = { path = "crates/codigo-github" }
+codigo-gitlab = { path = "crates/codigo-gitlab" }
 codigo-ai = { path = "crates/codigo-ai" }
 codigo-term = { path = "crates/codigo-term" }
 codigo-quality = { path = "crates/codigo-quality" }

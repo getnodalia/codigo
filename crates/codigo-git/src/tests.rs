@@ -208,6 +208,19 @@ fn a_token_never_appears_in_an_error() {
     assert!(!err.to_string().contains("ghp_"));
 }
 
+#[test]
+fn a_gitlab_token_never_appears_in_an_error() {
+    let auth = Auth::GitLabToken {
+        host: "gitlab.com".into(),
+        token: "glpat-supersecret".into(),
+    };
+    assert_eq!(
+        run::scrub("fatal: glpat-supersecret rejected", &auth),
+        "fatal: *** rejected"
+    );
+    assert_eq!(format!("{auth:?}"), "Auth::GitLabToken(…)");
+}
+
 fn committed(repo: &Repo, name: &str, text: &str, message: &str) {
     write(repo, name, text);
     repo.stage_all().expect("add");

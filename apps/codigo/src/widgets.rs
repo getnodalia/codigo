@@ -75,6 +75,10 @@ fn paint_icon_button(
 /// Paint an icon by name: the Nodalia set, or one of the few drawn in `glyphs`.
 pub fn paint_named(painter: &egui::Painter, rect: egui::Rect, name: &str, ink: Color32) {
     use crate::glyphs::{self, Glyph};
+    if let Some(brand) = crate::brand::Brand::from_icon_name(name) {
+        crate::brand::paint(painter, rect, brand, ink);
+        return;
+    }
     let glyph = match name {
         "bug" => Some(Glyph::Bug),
         "step-over" => Some(Glyph::StepOver),

@@ -14,6 +14,8 @@ pub enum Auth {
     None,
     /// A GitHub token, sent for https remotes of github.com only.
     GitHubToken(String),
+    /// A GitLab personal access token, sent for https remotes of `host` only.
+    GitLabToken { host: String, token: String },
 }
 
 impl std::fmt::Debug for Auth {
@@ -21,6 +23,7 @@ impl std::fmt::Debug for Auth {
         match self {
             Auth::None => f.write_str("Auth::None"),
             Auth::GitHubToken(_) => f.write_str("Auth::GitHubToken(…)"),
+            Auth::GitLabToken { .. } => f.write_str("Auth::GitLabToken(…)"),
         }
     }
 }
@@ -55,6 +58,20 @@ pub fn git_input(dir: &Path, args: &[&str], input: Option<&[u8]>, auth: &Auth) -
                 "GIT_CONFIG_VALUE_0",
                 format!("Authorization: Basic {basic}"),
             );
+    }
+    if let Auth::GitLabToken { host, token } = auth {
+        if plain_host(host) {
+            let basic = base64::encode(format!("oauth2:{token}").as_bytes());
+            cmd.env("GIT_CONFIG_COUNT", "1")
+                .env(
+                    "GIT_CONFIG_KEY_0",
+                    format!("http.https://{host}/.extraheader"),
+                )
+                .env(
+                    "GIT_CONFIG_VALUE_0",
+                    format!("Authorization: Basic {basic}"),
+                );
+        }
     }
     let out = match input {
         None => cmd.output(),
@@ -91,6 +108,16 @@ pub fn git_input(dir: &Path, args: &[&str], input: Option<&[u8]>, auth: &Auth) -
 pub(crate) fn scrub(text: &str, auth: &Auth) -> String {
     match auth {
         Auth::GitHubToken(t) if t.len() >= 6 => text.replace(t.as_str(), "***"),
+        Auth::GitLabToken { token, .. } if token.len() >= 6 => text.replace(token.as_str(), "***"),
         _ => text.to_owned(),
     }
+}
+
+/// A host name safe to put in a git config key: letters, digits, dots, dashes and a port.
+fn plain_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':'))
 }

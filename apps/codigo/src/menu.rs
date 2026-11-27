@@ -187,6 +187,18 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
             ]),
         ),
         (
+            tr("GitLab"),
+            items(&[
+                some(GitLabClone),
+                some(GitLabShow),
+                some(GitLabCreateMergeRequest),
+                None,
+                some(GitLabSignIn),
+                some(GitLabSignOut),
+                some(GitLabRefresh),
+            ]),
+        ),
+        (
             tr("Assistant"),
             items(&[
                 some(AiShow),

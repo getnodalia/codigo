@@ -26,17 +26,19 @@ pub enum Page {
     Editor,
     Files,
     Terminal,
+    Accounts,
     Tools,
     Advanced,
 }
 
 impl Page {
-    const ALL: [Page; 7] = [
+    const ALL: [Page; 8] = [
         Page::Appearance,
         Page::Colors,
         Page::Editor,
         Page::Files,
         Page::Terminal,
+        Page::Accounts,
         Page::Tools,
         Page::Advanced,
     ];
@@ -48,6 +50,7 @@ impl Page {
             Page::Editor => tr("Editor"),
             Page::Files => tr("Files and saving"),
             Page::Terminal => tr("Terminal"),
+            Page::Accounts => tr("Accounts"),
             Page::Tools => tr("Tools and assistant"),
             Page::Advanced => tr("Advanced"),
         }
@@ -64,6 +67,8 @@ pub struct PrefsState {
     font_query: String,
     mono_only: bool,
     rulers: String,
+    /// The GitLab server being typed; it is used when the person says so.
+    gitlab_host: String,
     reset_armed: bool,
     /// A change is waiting to be written to disk (a slider or colour picker is still held).
     dirty: bool,
@@ -80,6 +85,7 @@ impl PrefsState {
             font_query: String::new(),
             mono_only: true,
             rulers: rulers_text(&app.settings.rulers),
+            gitlab_host: app.settings.gitlab_host.clone(),
             reset_armed: false,
             dirty: false,
         }
@@ -104,6 +110,9 @@ fn parse_rulers(text: &str) -> Vec<u16> {
 enum Action {
     Close,
     OpenAssistant,
+    ShowGitHub,
+    ShowGitLab,
+    UseGitlabHost,
     ResetAll,
 }
 
@@ -116,6 +125,11 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut st: Box<Pref
             action = Some(Action::Close);
         }
         ui.add_space(6.0);
+        let accounts = Accounts {
+            github: app.gh.user.as_ref().map(|u| u.login.clone()),
+            gitlab: app.gl.user.as_ref().map(|u| u.username.clone()),
+            gitlab_host: app.gl.host.clone(),
+        };
         let fonts = app.fonts.as_deref();
         let settings = &mut app.settings;
         ui.horizontal_top(|ui| {
@@ -151,6 +165,7 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut st: Box<Pref
                                 s: settings,
                                 fonts,
                                 st: &mut st,
+                                accounts: &accounts,
                                 changed: false,
                                 action: None,
                             };
@@ -177,6 +192,26 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut st: Box<Pref
             crate::ai_ui::open_settings(app);
             return (Overlay::None, true);
         }
+        Some(Action::ShowGitHub) => {
+            app.save_settings();
+            crate::github_ui::show(app);
+            return (Overlay::None, true);
+        }
+        Some(Action::ShowGitLab) => {
+            app.save_settings();
+            crate::gitlab_ui::show(app);
+            return (Overlay::None, true);
+        }
+        Some(Action::UseGitlabHost) => {
+            let host = st.gitlab_host.trim().to_lowercase();
+            if codigo_gitlab::valid_host(&host) {
+                app.settings.gitlab_host = host;
+                app.save_settings();
+                crate::gitlab_ui::use_host(app);
+            } else {
+                app.toast(tr("That is not a server address such as gitlab.com."));
+            }
+        }
         Some(Action::ResetAll) => {
             let recent = std::mem::take(&mut app.settings.recent_projects);
             app.settings = Settings {
@@ -186,8 +221,10 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut st: Box<Pref
             i18n::set(Lang::from_setting(&app.settings.language));
             st.zoom = app.settings.ui_scale;
             st.rulers = rulers_text(&app.settings.rulers);
+            st.gitlab_host = app.settings.gitlab_host.clone();
             st.reset_armed = false;
             app.save_settings();
+            crate::gitlab_ui::use_host(app);
         }
         Some(Action::Close) => {
             app.save_settings();
@@ -203,12 +240,20 @@ pub fn overlay(ctx: &egui::Context, app: &mut App, look: &Look, mut st: Box<Pref
     }
 }
 
+/// Who is signed in, for the Accounts page.
+struct Accounts {
+    github: Option<String>,
+    gitlab: Option<String>,
+    gitlab_host: String,
+}
+
 /// Everything a page needs to draw and change settings.
 struct Env<'a> {
     look: &'a Look,
     s: &'a mut Settings,
     fonts: Option<&'a [Family]>,
     st: &'a mut PrefsState,
+    accounts: &'a Accounts,
     changed: bool,
     action: Option<Action>,
 }
@@ -284,6 +329,7 @@ fn pages(ui: &mut Ui, env: &mut Env) {
             Page::Editor => editor(ui, env, &mut cx),
             Page::Files => files(ui, env, &mut cx),
             Page::Terminal => terminal(ui, env, &mut cx),
+            Page::Accounts => accounts(ui, env, &mut cx),
             Page::Tools => tools(ui, env, &mut cx),
             Page::Advanced => advanced(ui, env, &mut cx),
         }
@@ -387,6 +433,7 @@ fn text_field(ui: &mut Ui, look: &Look, text: &mut String, hint: &str, width: f3
                 egui::TextEdit::singleline(text)
                     .frame(egui::Frame::NONE)
                     .hint_text(hint)
+                    .align(egui::Align2::LEFT_CENTER)
                     .desired_width(width),
             )
             .changed()
@@ -1122,6 +1169,72 @@ fn terminal(ui: &mut Ui, env: &mut Env, cx: &mut Cx) {
 }
 
 // --- Tools ----------------------------------------------------------------------------------
+
+fn accounts(ui: &mut Ui, env: &mut Env, cx: &mut Cx) {
+    let look = env.look;
+    let github = env.accounts.github.clone();
+    let gitlab = env.accounts.gitlab.clone();
+    let host = env.accounts.gitlab_host.clone();
+    section(cx, "GitHub");
+    let mut open = false;
+    row(
+        cx,
+        ui,
+        look,
+        "GitHub account",
+        "Pull requests, issues and cloning. The token is kept in the system's keyring.",
+        |ui| {
+            let label = match &github {
+                Some(user) => trf("Signed in as {}", &[user]),
+                None => tr("Sign in…").to_owned(),
+            };
+            open = cr::secondary_button(ui, look, &label, true).clicked();
+            false
+        },
+    );
+    if open {
+        env.action = Some(Action::ShowGitHub);
+    }
+    section(cx, "GitLab");
+    let mut open = false;
+    row(
+        cx,
+        ui,
+        look,
+        "GitLab account",
+        "Merge requests, issues and cloning. The token is kept in the system's keyring.",
+        |ui| {
+            let label = match &gitlab {
+                Some(user) => trf("Signed in as {} on {}", &[user, &host]),
+                None => tr("Sign in…").to_owned(),
+            };
+            open = cr::secondary_button(ui, look, &label, true).clicked();
+            false
+        },
+    );
+    if open {
+        env.action = Some(Action::ShowGitLab);
+    }
+    let mut use_host = false;
+    let typed = &mut env.st.gitlab_host;
+    row(
+        cx,
+        ui,
+        look,
+        "GitLab server",
+        "gitlab.com, or the address of your own GitLab server. A token only works on the server it was made for.",
+        |ui| {
+            ui.horizontal(|ui| {
+                use_host = cr::secondary_button(ui, look, tr("Use"), true).clicked();
+                text_field(ui, look, typed, "gitlab.com", 170.0);
+            });
+            false
+        },
+    );
+    if use_host {
+        env.action = Some(Action::UseGitlabHost);
+    }
+}
 
 fn tools(ui: &mut Ui, env: &mut Env, cx: &mut Cx) {
     let look = env.look;
