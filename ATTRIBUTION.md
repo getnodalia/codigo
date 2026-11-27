@@ -5,7 +5,7 @@ Every asset in this repository, with its author, source and licence. Code is `MI
 
 | Path | What | Author | Source | Licence |
 |---|---|---|---|---|
-| `assets/icons/codigo-portrait-1024.png`, `assets/icons/codigo*.svg`, `assets/icons/codigo-1024.png` | App icon artwork: Grace Hopper (1906–1992), who wrote the first compiler, cut out in black and white on Código's green | Nodalia, from the official U.S. Navy portrait of 1984 by James S. Davis | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Commodore_Grace_M._Hopper,_USN_(covered).jpg); made with nodalia-design `tools/app-portrait` | Portrait: public domain (a work of the U.S. federal government). Artwork: MIT OR Apache-2.0 |
+| `assets/icons/codigo-portrait-1024.png`, `assets/icons/codigo*.svg`, `assets/icons/codigo-1024.png` | App icon artwork: Alan Turing (1912–1954), who defined what a program can compute, cut out in black and white on Código's green | Nodalia, from his passport photograph at 16 (1928–1929, possibly by Arthur Reginald Chaffin; Turing Digital Archive, King's College, Cambridge) | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Alan_Turing_Aged_16.jpg); made with nodalia-design `tools/app-portrait` | Portrait: public domain. Artwork: MIT OR Apache-2.0 |
 | `assets/icons/hicolor/*/apps/dev.danielmiguelt.Codigo.*`, `assets/icons/codigo.ico` | App icon at each size, on the Colloid application grid | Nodalia | made from the artwork above with nodalia-design `tools/app-portrait/icon-set.py`; the `.ico` packs the 16–256 px PNGs | MIT OR Apache-2.0 |
 
 Interface icons, colours and the window controls are drawn by `nodalia-theme`, from

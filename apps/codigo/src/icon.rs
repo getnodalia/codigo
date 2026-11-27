@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! The app icon: Grace Hopper, who wrote the first compiler, from the official 1984 U.S. Navy
-//! portrait (Wikimedia Commons, public domain), in black and white on Código's green. The same
+//! The app icon: Alan Turing, who defined what a program can compute, from his passport photograph
+//! at 16 (Wikimedia Commons, public domain), in black and white on Código's green. The same
 //! PNG is the window icon and the logo drawn in the app.
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
@@ -11,7 +11,7 @@ const PNG: &[u8] =
 
 /// Who the portrait is and where it comes from, for About.
 pub const CREDIT: &str =
-    "Icon: Grace Hopper, from the official 1984 U.S. Navy portrait (public domain).";
+    "Icon: Alan Turing, from his passport photograph at 16 (public domain).";
 
 /// Decode the icon into RGBA pixels: `(width, height, rgba)`.
 pub fn rgba() -> Option<(u32, u32, Vec<u8>)> {

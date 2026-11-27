@@ -26,7 +26,7 @@ None.
 - `nodalia-theme` (egui, `creator` feature): `Accent::Codigo` (`#0B9A80`), islands, buttons, fields,
   window controls, icons and the About page. The accent lands in nodalia-design #85.
 - `nodalia-update`: the in-app update check.
-- `tools/app-portrait` in nodalia-design made the icon (Grace Hopper).
+- `tools/app-portrait` in nodalia-design made the icon (Alan Turing).
 
 ## NDL work pending
 

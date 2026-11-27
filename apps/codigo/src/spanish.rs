@@ -200,7 +200,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("How do you check this project?", "¿Cómo se comprueba este proyecto?"),
     ("How do you run this project?", "¿Cómo se ejecuta este proyecto?"),
     ("How do you test this project?", "¿Cómo se prueba este proyecto?"),
-    ("Icon: Grace Hopper, from the official 1984 U.S. Navy portrait (public domain).", "Icono: Grace Hopper, del retrato oficial de la Marina de EE. UU. de 1984 (dominio público)."),
+    ("Icon: Alan Turing, from his passport photograph at 16 (public domain).", "Icono: Alan Turing, de su fotografía de pasaporte a los 16 años (dominio público)."),
     ("Include the selected code", "Incluir el código seleccionado"),
     ("Incoming", "Entrante"),
     ("Indent", "Aumentar sangría"),
