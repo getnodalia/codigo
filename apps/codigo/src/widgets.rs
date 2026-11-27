@@ -152,6 +152,46 @@ pub fn toggle_chip(ui: &mut Ui, look: &Look, text: &str, label: &str, on: bool) 
     response.on_hover_text(label)
 }
 
+/// A labelled tab chip: an icon and a word, as wide as they need. `toggle_chip` is a fixed box
+/// for two characters, and a longer label drew over its neighbours.
+pub fn tab_chip(ui: &mut Ui, look: &Look, icon_name: &str, label: &str, on: bool) -> Response {
+    let p = &look.palette;
+    let ink = if on {
+        color(p.accent_text)
+    } else {
+        color(p.text_secondary)
+    };
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), FontId::proportional(12.0), ink);
+    let (pad, icon_size, gap) = (8.0, 14.0, 5.0);
+    let size = vec2(
+        pad * 2.0 + icon_size + gap + galley.size().x,
+        galley.size().y.max(icon_size) + 10.0,
+    );
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let fill = if on {
+        color(p.accent_subtle)
+    } else if response.hovered() {
+        color(p.control_bg_hover)
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter().rect_filled(rect, CornerRadius::same(8), fill);
+    let icon_rect = egui::Rect::from_min_size(
+        egui::pos2(rect.left() + pad, rect.center().y - icon_size / 2.0),
+        vec2(icon_size, icon_size),
+    );
+    paint_named(ui.painter(), icon_rect, icon_name, ink);
+    let text_pos = egui::pos2(
+        icon_rect.right() + gap,
+        rect.center().y - galley.size().y / 2.0,
+    );
+    ui.painter().galley(text_pos, galley, ink);
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, on, label));
+    response
+}
+
 /// Lay out `add` from the right edge, on the current row. `with_layout` would claim the whole
 /// height left in a horizontal row and push the row's height to it.
 pub fn trailing<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
@@ -167,4 +207,48 @@ pub fn trailing<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
         add,
     )
     .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nodalia_theme::{Accent, Mode};
+
+    /// The panels' tab rows once drew five labels in boxes made for two characters, on top of one
+    /// another. Each chip must take the room of its own label, and a narrow sidebar must wrap.
+    #[test]
+    fn tab_chips_do_not_overlap_and_wrap_inside_a_narrow_sidebar() {
+        let look = Look::new(Mode::Dark.palette_with(Accent::Codigo));
+        let ctx = egui::Context::default();
+        let labels = [
+            "Pull requests",
+            "Issues",
+            "Mine",
+            "To review",
+            "Repositories",
+        ];
+        let mut rects = Vec::new();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.set_max_width(330.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                for label in labels {
+                    rects.push(tab_chip(ui, &look, "branch", label, false).rect);
+                }
+            });
+        });
+        out.textures_delta.clear();
+        assert_eq!(rects.len(), labels.len());
+        for (i, a) in rects.iter().enumerate() {
+            assert!(a.width() > 60.0, "chip {i} is only {} wide", a.width());
+            assert!(a.right() <= 340.0, "chip {i} runs out of the sidebar");
+            for b in &rects[i + 1..] {
+                assert!(!a.intersects(*b), "{a:?} overlaps {b:?}");
+            }
+        }
+        assert!(
+            rects.iter().any(|r| r.top() > rects[0].top()),
+            "five labelled chips must wrap in 330 points"
+        );
+    }
 }

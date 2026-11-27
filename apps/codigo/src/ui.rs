@@ -538,8 +538,12 @@ fn sidebar_content(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>)
             crate::ai_ui::panel(ui, app, look);
         }
         Panel::Debug => {
-            if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {
+            let outcome = crate::debug_ui::panel(ui, app, look);
+            if let Some((path, line)) = outcome.open {
                 acts.push(Act::OpenAt { path, line });
+            }
+            if outcome.retry {
+                crate::debug_ui::start(app);
             }
         }
         Panel::Quality => {

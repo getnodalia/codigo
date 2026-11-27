@@ -55,6 +55,16 @@ pub enum Tab {
 impl Tab {
     const ALL: [Tab; 5] = [Tab::Pulls, Tab::Issues, Tab::Mine, Tab::Review, Tab::Repos];
 
+    fn icon(self) -> &'static str {
+        match self {
+            Tab::Pulls => "branch",
+            Tab::Issues => "info",
+            Tab::Mine => "user",
+            Tab::Review => "check-square",
+            Tab::Repos => "book",
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Tab::Pulls => "Pull requests",
@@ -935,14 +945,8 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         for tab in Tab::ALL {
-            if crate::widgets::toggle_chip(
-                ui,
-                look,
-                tr(tab.label()),
-                tr(tab.label()),
-                app.gh.tab == tab,
-            )
-            .clicked()
+            if crate::widgets::tab_chip(ui, look, tab.icon(), tr(tab.label()), app.gh.tab == tab)
+                .clicked()
             {
                 app.gh.tab = tab;
                 ensure(app);

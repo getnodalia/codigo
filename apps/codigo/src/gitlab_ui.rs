@@ -47,6 +47,16 @@ impl Tab {
         Tab::Projects,
     ];
 
+    fn icon(self) -> &'static str {
+        match self {
+            Tab::Merges => "branch",
+            Tab::Issues => "info",
+            Tab::Mine => "user",
+            Tab::Review => "check-square",
+            Tab::Projects => "book",
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Tab::Merges => "Merge requests",
@@ -741,14 +751,8 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         for tab in Tab::ALL {
-            if crate::widgets::toggle_chip(
-                ui,
-                look,
-                tr(tab.label()),
-                tr(tab.label()),
-                app.gl.tab == tab,
-            )
-            .clicked()
+            if crate::widgets::tab_chip(ui, look, tab.icon(), tr(tab.label()), app.gl.tab == tab)
+                .clicked()
             {
                 app.gl.tab = tab;
                 ensure(app);

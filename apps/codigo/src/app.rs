@@ -36,7 +36,10 @@ pub enum Msg {
     Blame(PathBuf, u64, Vec<codigo_git::BlameLine>),
     Quality(u64, codigo_quality::Report),
     /// The program to debug was built and a debugger found, or why not.
-    DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
+    DebugSpec(
+        u64,
+        Result<codigo_dap::LaunchSpec, crate::debug_ui::Failure>,
+    ),
     /// Nothing to debug was recognised: ask the person what to start.
     DebugAsk(u64, String),
     /// A big file was read off the window thread.
