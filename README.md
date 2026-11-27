@@ -128,7 +128,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 | Git | Working |
 | GitHub | Status, diffs, staging, committing, cloning and public reads tried; reviews, the keyring and browser sign-in not yet run against a real account |
 | AI assistants | Tried against a local OpenAI-compatible server; the Anthropic and OpenAI services not yet |
-| App icon | Done: portrait of Grace Hopper |
+| App icon | Done: portrait of Alan Turing |
 | Nodalia interface | Done: Nodalia theme and icons, rounded islands, main menu, Nodalia window controls on Linux |
 | Global menu | Done on Linux (D-Bus), in the top bar of the shell |
 | Installable packages | Linux, macOS (DMG) and Windows (MSI and zip), with an in-app update check |
@@ -136,7 +136,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 ## App icon
 
 Nodalia app icons are black-and-white portraits of historical figures over the app colour.
-Código's is Grace Hopper, who wrote the first compiler. Provenance and licence are in
+Código's is Alan Turing, who defined what a program can compute. Provenance and licence are in
 [`ATTRIBUTION.md`](ATTRIBUTION.md).
 
 ## The Nodalia suite

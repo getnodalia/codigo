@@ -1,16 +1,16 @@
 # Código app icon
 
-**Figure:** Grace Hopper (1906–1992), who wrote the first compiler and pushed programming towards
-languages people can read, and who made "debugging" a word every programmer knows.
+**Figure:** Alan Turing (1912–1954), who in 1936 defined what a program can compute with the machine
+that bears his name, and so gave programming its theory.
 
 **Style:** a black-and-white portrait cut out over a full-bleed colour field, head and shoulders,
 the bust running off the bottom edge, in the Nodalia icon family (one historical figure per app,
 one colour per app). The tile is Código teal, `#12B094` at the top to `#0B9A80` at the bottom.
 
-**Provenance:** the portrait is the official U.S. Navy photograph "Commodore Grace M. Hopper, USN
-(covered)" (1984, by James S. Davis), a work of the U.S. federal government and so in the public
-domain, on [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Commodore_Grace_M._Hopper,_USN_(covered).jpg).
-The figure was cut out with nodalia-design's `tools/app-portrait`.
+**Provenance:** the portrait is the passport photograph of Alan Turing at 16 (1928–1929, possibly by
+Arthur Reginald Chaffin; Turing Digital Archive, King's College, Cambridge), in the public domain, on
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Alan_Turing_Aged_16.jpg). The figure was
+cut out with nodalia-design's `tools/app-portrait`.
 
 ## Files
 
@@ -27,9 +27,9 @@ The figure was cut out with nodalia-design's `tools/app-portrait`.
 
 ```sh
 # the artwork, with nodalia-design's tools/app-portrait/portrait.py (see its README):
-python3 portrait.py hopper.jpg codigo-portrait-1024.png --box 672,228,1872,1428 --colors '#12B094' '#0B9A80'
+python3 portrait.py turing.jpg codigo-portrait-1024.png --box 30,10,670,650 --colors '#12B094' '#0B9A80'
 # every file above:
 python3 icon-set.py codigo-portrait-1024.png assets/icons --slug codigo --app-id dev.danielmiguelt.Codigo --comment '…'
 ```
 
-`hopper.jpg` is the 1920 px version from Commons.
+`turing.jpg` is the 675 × 919 px original from Commons.
