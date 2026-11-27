@@ -10,8 +10,7 @@ const PNG: &[u8] =
     include_bytes!("../../../assets/icons/hicolor/256x256/apps/dev.danielmiguelt.Codigo.png");
 
 /// Who the portrait is and where it comes from, for About.
-pub const CREDIT: &str =
-    "Icon: Alan Turing, from his passport photograph at 16 (public domain).";
+pub const CREDIT: &str = "Icon: Alan Turing, from his passport photograph at 16 (public domain).";
 
 /// Decode the icon into RGBA pixels: `(width, height, rgba)`.
 pub fn rgba() -> Option<(u32, u32, Vec<u8>)> {
