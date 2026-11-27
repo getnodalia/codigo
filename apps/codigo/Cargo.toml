@@ -31,6 +31,7 @@ egui.workspace = true
 nodalia-theme.workspace = true
 nodalia-update = { git = "https://github.com/getnodalia/nodalia-design", rev = "114848a2ff1a7c29c9a5432fb12e955fbe0aeef2", features = ["egui"] }
 png = "0.17"
+read-fonts = "0.41"
 sys-locale = "0.3"
 serde.workspace = true
 tracing.workspace = true

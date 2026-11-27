@@ -80,6 +80,9 @@ line icons in Código's green, and the suite's own window controls on Linux.
 - **Projects and workspace.** A file explorer that respects `.gitignore`, quick open (`Ctrl+P`),
   search across the project, a command palette and a minimap, with tabs and folders restored at the
   next launch.
+- **Yours to customise.** A large Preferences window with a search: colour themes (Dracula, One
+  Dark, Monokai, Solarized, GitHub, Nord, Gruvbox, Tokyo Night, Catppuccin), every colour editable,
+  any installed code font, line height, cursor style, rulers, interface zoom and the terminal shell.
 - **Nodalia Design.** Light, dark and high-contrast themes, round window controls on Linux (native
   ones on macOS and Windows), a global menu over D-Bus on Linux, a reduced-motion option and an
   in-app update check, in English and Spanish.

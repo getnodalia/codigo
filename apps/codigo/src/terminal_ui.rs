@@ -93,7 +93,7 @@ fn start(app: &mut App, ctx: &egui::Context, spec: Spec, title: String, task: bo
 }
 
 pub fn new_shell(app: &mut App, ctx: &egui::Context) {
-    let spec = codigo_term::shell_command(work_dir(app));
+    let spec = codigo_term::shell_command_with(work_dir(app), &app.settings.terminal_shell);
     let n = app.term.tabs.iter().filter(|t| !t.task).count() + 1;
     start(app, ctx, spec, trf("Terminal {}", &[&n.to_string()]), false);
 }
@@ -383,7 +383,7 @@ fn selection_text(screen: &codigo_term::Screen, a: Cell, b: Cell) -> String {
 /// Draw the panel into `ui`, which is the terminal island.
 pub fn show(ui: &mut Ui, app: &mut App, look: &Look) {
     let p = &look.palette;
-    let font_size = app.editor_options().font_size;
+    let font_size = app.settings.font_size;
     let ctx = ui.ctx().clone();
     let mut close_tab = None;
     let mut new_shell_clicked = false;

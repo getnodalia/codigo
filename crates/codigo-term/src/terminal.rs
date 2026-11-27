@@ -54,12 +54,14 @@ fn passwd_shell(passwd: &str, user: &str) -> Option<String> {
 /// (a shell that was uninstalled) must not leave the terminal empty.
 #[cfg(unix)]
 fn choose_shell(
+    preferred: Option<String>,
     env_shell: Option<String>,
     listed: Option<String>,
     usable: impl Fn(&str) -> bool,
 ) -> String {
-    env_shell
+    preferred
         .into_iter()
+        .chain(env_shell)
         .chain(listed)
         .chain(
             [
@@ -75,10 +77,36 @@ fn choose_shell(
         .unwrap_or_else(|| "/bin/sh".to_owned())
 }
 
+/// A program named in preferences: a path as it is, a bare name looked up on `path_var`.
+#[cfg(unix)]
+fn locate(name: &str, path_var: &str, usable: impl Fn(&str) -> bool) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    if name.contains('/') {
+        return usable(name).then(|| name.to_owned());
+    }
+    path_var
+        .split(':')
+        .filter(|d| !d.is_empty())
+        .map(|d| format!("{d}/{name}"))
+        .find(|candidate| usable(candidate))
+}
+
 /// The user's shell, as a [`Spec`] to run in `cwd`.
 pub fn shell_command(cwd: PathBuf) -> Spec {
+    shell_command_with(cwd, "")
+}
+
+/// Like [`shell_command`], but a `preferred` program (a path, or a name on `PATH`) goes first
+/// when it can be run, and the usual choice follows when it cannot.
+pub fn shell_command_with(cwd: PathBuf, preferred: &str) -> Spec {
     #[cfg(windows)]
-    let program = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned());
+    let program = match preferred.trim() {
+        "" => std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned()),
+        other => other.to_owned(),
+    };
     #[cfg(not(windows))]
     let program = {
         let user = std::env::var("USER")
@@ -88,7 +116,12 @@ pub fn shell_command(cwd: PathBuf) -> Spec {
             let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
             passwd_shell(&passwd, &u)
         });
-        choose_shell(std::env::var("SHELL").ok(), listed, runnable)
+        let preferred = locate(
+            preferred,
+            &std::env::var("PATH").unwrap_or_default(),
+            runnable,
+        );
+        choose_shell(preferred, std::env::var("SHELL").ok(), listed, runnable)
     };
     let mut env = vec![("SHELL".to_owned(), program.clone())];
     // A session started from a desktop launcher may have no locale; the screen expects UTF-8.
@@ -393,6 +426,7 @@ mod tests {
         // $SHELL is gone: the system's listing wins over the common shells.
         assert_eq!(
             choose_shell(
+                None,
                 Some("/gone/zsh".into()),
                 Some("/usr/bin/fish".into()),
                 usable
@@ -401,14 +435,43 @@ mod tests {
         );
         // No $SHELL at all (a desktop launcher): the listing is used.
         assert_eq!(
-            choose_shell(None, Some("/usr/bin/fish".into()), usable),
+            choose_shell(None, None, Some("/usr/bin/fish".into()), usable),
             "/usr/bin/fish"
         );
         // Neither: a common shell.
-        assert_eq!(choose_shell(None, None, usable), "/bin/sh");
+        assert_eq!(choose_shell(None, None, None, usable), "/bin/sh");
         // Nothing is usable: still a program name, so the error says which.
-        assert_eq!(choose_shell(None, None, |_| false), "/bin/sh");
-        assert_eq!(choose_shell(Some(String::new()), None, usable), "/bin/sh");
+        assert_eq!(choose_shell(None, None, None, |_| false), "/bin/sh");
+        assert_eq!(
+            choose_shell(None, Some(String::new()), None, usable),
+            "/bin/sh"
+        );
+        // A shell chosen in preferences goes first.
+        assert_eq!(
+            choose_shell(
+                Some("/usr/bin/fish".into()),
+                Some("/bin/sh".into()),
+                None,
+                usable
+            ),
+            "/usr/bin/fish"
+        );
+    }
+
+    #[test]
+    fn a_preferred_program_is_a_path_or_a_name_on_path() {
+        let usable = |s: &str| s == "/opt/bin/nu" || s == "/usr/bin/fish";
+        assert_eq!(
+            locate("fish", "/opt/bin:/usr/bin", usable).as_deref(),
+            Some("/usr/bin/fish")
+        );
+        assert_eq!(
+            locate(" /opt/bin/nu ", "", usable).as_deref(),
+            Some("/opt/bin/nu")
+        );
+        assert_eq!(locate("/gone/nu", "/opt/bin", usable), None);
+        assert_eq!(locate("zsh", "/opt/bin:/usr/bin", usable), None);
+        assert_eq!(locate("   ", "/usr/bin", usable), None);
     }
 
     #[test]

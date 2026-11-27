@@ -35,6 +35,77 @@ pub enum Scope {
 }
 
 impl Scope {
+    /// Every scope, in the order a colour editor lists them.
+    pub const ALL: [Scope; 28] = [
+        Scope::Keyword,
+        Scope::Control,
+        Scope::Operator,
+        Scope::Punctuation,
+        Scope::Bracket,
+        Scope::String,
+        Scope::Escape,
+        Scope::Number,
+        Scope::Constant,
+        Scope::Boolean,
+        Scope::Comment,
+        Scope::DocComment,
+        Scope::Function,
+        Scope::Method,
+        Scope::Macro,
+        Scope::Type,
+        Scope::BuiltinType,
+        Scope::Variable,
+        Scope::Parameter,
+        Scope::Property,
+        Scope::Attribute,
+        Scope::Namespace,
+        Scope::Label,
+        Scope::Tag,
+        Scope::Heading,
+        Scope::Emphasis,
+        Scope::Link,
+        Scope::Literal,
+    ];
+
+    /// A stable lower-case name, used in settings files.
+    pub fn key(self) -> &'static str {
+        match self {
+            Scope::Keyword => "keyword",
+            Scope::Control => "control",
+            Scope::Operator => "operator",
+            Scope::Punctuation => "punctuation",
+            Scope::Bracket => "bracket",
+            Scope::String => "string",
+            Scope::Escape => "escape",
+            Scope::Number => "number",
+            Scope::Constant => "constant",
+            Scope::Boolean => "boolean",
+            Scope::Comment => "comment",
+            Scope::DocComment => "doc_comment",
+            Scope::Function => "function",
+            Scope::Method => "method",
+            Scope::Macro => "macro",
+            Scope::Type => "type",
+            Scope::BuiltinType => "builtin_type",
+            Scope::Variable => "variable",
+            Scope::Parameter => "parameter",
+            Scope::Property => "property",
+            Scope::Attribute => "attribute",
+            Scope::Namespace => "namespace",
+            Scope::Label => "label",
+            Scope::Tag => "tag",
+            Scope::Heading => "heading",
+            Scope::Emphasis => "emphasis",
+            Scope::Link => "link",
+            Scope::Literal => "literal",
+        }
+    }
+
+    /// The scope a [`Scope::key`] names.
+    pub fn from_key(key: &str) -> Option<Scope> {
+        Scope::ALL.into_iter().find(|s| s.key() == key)
+    }
+
     /// The scope a tree-sitter capture name such as `function.method` stands for. The longest
     /// dotted prefix that is known wins; names that style nothing (`spell`, `none`, injection and
     /// local-scope captures) give `None`.
@@ -132,6 +203,16 @@ fn exact(name: &str) -> Option<Option<Scope>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_scope_has_a_unique_key_that_finds_it_again() {
+        let mut seen = std::collections::HashSet::new();
+        for s in Scope::ALL {
+            assert!(seen.insert(s.key()), "{s:?} repeats a key");
+            assert_eq!(Scope::from_key(s.key()), Some(s));
+        }
+        assert_eq!(Scope::from_key("nope"), None);
+    }
 
     #[test]
     fn the_longest_known_prefix_wins() {

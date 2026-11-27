@@ -22,16 +22,26 @@ use nodalia_theme::creator::Look;
 use nodalia_theme::for_egui::color;
 
 use crate::layout::{self, cells_of};
-use crate::syntax_theme;
+use codigo_engine::settings::CursorStyle;
+use codigo_engine::theme::{Colors, Rgb, Slot};
 
 /// Word wrap needs a row count for every line; beyond this many lines it is not offered.
 pub const WRAP_LINE_LIMIT: usize = 50_000;
 /// Space between the gutter and the first column, and after the last, in points.
 const PAD: f32 = 10.0;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Options {
     pub font_size: f32,
+    /// Row height as a multiple of the font size.
+    pub line_height: f32,
+    /// The colours of the text, of the selection, of the current line and of each kind of code.
+    pub colors: std::sync::Arc<Colors>,
+    pub cursor: CursorStyle,
+    pub cursor_blink: bool,
+    /// Columns where a thin vertical line is drawn.
+    pub rulers: Vec<u16>,
+    pub indent_guides: bool,
     pub word_wrap: bool,
     pub line_numbers: bool,
     pub highlight_line: bool,
@@ -367,6 +377,10 @@ pub fn show(
     out
 }
 
+fn c32(c: Rgb) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2)
+}
+
 /// Width of the minimap strip, and how wide the editor must be to afford one.
 const MINIMAP_W: f32 = 92.0;
 const MINIMAP_MIN_AREA: f32 = 480.0;
@@ -549,7 +563,7 @@ fn show_text(
         .size()
         .x
         .max(1.0);
-    let row_h = (opts.font_size * 1.55).round().max(10.0);
+    let row_h = (opts.font_size * opts.line_height).round().max(10.0);
     let lines = doc.buffer().line_count();
     let gutter = if opts.line_numbers {
         (digits(lines).max(3) as f32) * cw + PAD * 2.0 + 4.0
@@ -648,6 +662,18 @@ fn show_text(
             };
 
             let painter = ui.painter_at(clip);
+            // The text area paints its own surface, rounded like the island at its bottom edge.
+            let r = nodalia_theme::engineering::layout::ISLAND_RADIUS as u8;
+            painter.rect_filled(
+                clip,
+                CornerRadius {
+                    nw: 0,
+                    ne: 0,
+                    sw: r,
+                    se: r,
+                },
+                color(p.surface_panel),
+            );
             let selections: Vec<(usize, usize, usize)> = doc
                 .buffer()
                 .selections()
@@ -657,15 +683,24 @@ fn show_text(
             let buffer = doc.buffer();
             let caret_line = buffer.line_of(buffer.primary().head);
             let selection_fill = color(p.selection_bg);
-            let active_fill = color(p.control_bg).gamma_multiply(0.55);
+            let active_fill = c32(opts.colors.get(Slot::ActiveLine));
             let blink_on = {
                 let since = now - view.last_input;
-                since < 0.6 || ((now * 1.8) as i64) % 2 == 0
+                !opts.cursor_blink || since < 0.6 || ((now * 1.8) as i64) % 2 == 0
             };
             let tab = buffer.tab_width.max(1);
             let col_lo = ((viewport.min.x - m.gutter) / m.cw).floor() as i64 - 2;
             let col_hi = ((viewport.max.x - m.gutter) / m.cw).ceil() as i64 + 2;
             let mut caret_rect: Option<Rect> = None;
+            for column in &opts.rulers {
+                let x = text_x + f32::from(*column) * m.cw;
+                if x > clip.left() + m.gutter && x < clip.right() {
+                    painter.line_segment(
+                        [pos2(x, clip.top()), pos2(x, clip.bottom())],
+                        Stroke::new(1.0, color(p.text_tertiary).gamma_multiply(0.3)),
+                    );
+                }
+            }
             let mut gutter_items: Vec<(f32, usize, bool)> = Vec::new();
 
             for line in first_line..last_line {
@@ -704,6 +739,21 @@ fn show_text(
                         pos2(clip.left() + m.gutter, y),
                         vec2(clip.width() - m.gutter, m.row_h),
                     );
+                    if opts.indent_guides {
+                        let lead = laid
+                            .text
+                            .chars()
+                            .take_while(|c| *c == ' ' || *c == '\t')
+                            .count();
+                        let indent = laid.cells.get(lead).copied().unwrap_or(0) as usize;
+                        let guide = Stroke::new(1.0, color(p.text_tertiary).gamma_multiply(0.22));
+                        let mut level = 0;
+                        while level < indent {
+                            let x = text_x + level as f32 * m.cw;
+                            painter.line_segment([pos2(x, y), pos2(x, y + m.row_h)], guide);
+                            level += tab;
+                        }
+                    }
                     let selections_here = selections.iter().any(|s| s.0 != s.1);
                     if opts.highlight_line
                         && line == caret_line
@@ -842,12 +892,28 @@ fn show_text(
                             continue;
                         }
                         let x = x_of(c);
-                        let r = Rect::from_min_size(pos2(x, y + 1.0), vec2(2.0, m.row_h - 2.0));
+                        let r = match opts.cursor {
+                            CursorStyle::Line => {
+                                Rect::from_min_size(pos2(x, y + 1.0), vec2(2.0, m.row_h - 2.0))
+                            }
+                            CursorStyle::Block => {
+                                Rect::from_min_size(pos2(x, y + 1.0), vec2(m.cw, m.row_h - 2.0))
+                            }
+                            CursorStyle::Underline => {
+                                Rect::from_min_size(pos2(x, y + m.row_h - 3.0), vec2(m.cw, 2.0))
+                            }
+                        };
                         if *head == buffer.primary().head {
                             caret_rect = Some(r);
                         }
                         if focused && blink_on {
-                            painter.rect_filled(r, 1.0, color(p.accent_default));
+                            let fill = color(p.accent_default);
+                            let fill = if opts.cursor == CursorStyle::Block {
+                                fill.gamma_multiply(0.55)
+                            } else {
+                                fill
+                            };
+                            painter.rect_filled(r, 1.0, fill);
                         } else if !focused {
                             painter.rect_stroke(
                                 r.expand2(vec2(2.0, 0.0)),
@@ -1112,9 +1178,7 @@ fn paint_row(
             sp += 1;
         }
         let ink = match spans.get(sp) {
-            Some(s) if s.start <= byte => {
-                syntax_theme::ink(look, s.scope).map_or(plain, |i| i.color)
-            }
+            Some(s) if s.start <= byte => c32(opts.colors.scope(s.scope)),
             _ => plain,
         };
         match c {

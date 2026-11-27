@@ -49,6 +49,8 @@ pub enum Msg {
     Ai(crate::ai_ui::AiMsg),
     /// A file chooser was closed, or could not open.
     Pick(crate::dialogs::Reply),
+    /// The fonts installed on this computer were listed.
+    Fonts(Vec<crate::fonts::Family>),
 }
 
 /// Files above this size are read on a worker thread; smaller ones open before the next frame.
@@ -219,6 +221,12 @@ pub struct App {
     #[cfg(target_os = "linux")]
     menu: Option<crate::linux_menu::GlobalMenu>,
     applied: Option<(Appearance, bool, bool)>,
+    /// The fonts installed on this computer, once listed.
+    pub fonts: Option<Vec<crate::fonts::Family>>,
+    fonts_scanning: bool,
+    /// The code font family and zoom that were last handed to egui.
+    applied_font: Option<String>,
+    applied_scale: Option<f32>,
     decorated: Option<bool>,
     pub focus_editor: bool,
     pub split: Option<Split>,
@@ -310,6 +318,10 @@ impl App {
                 std::env::var_os("WAYLAND_DISPLAY").is_some_and(|d| !d.is_empty()),
             ),
             applied: None,
+            fonts: None,
+            fonts_scanning: false,
+            applied_font: Some(String::new()),
+            applied_scale: None,
             decorated: None,
             focus_editor: true,
             split: None,
@@ -375,6 +387,46 @@ impl App {
             Appearance::Dark => for_egui::apply(ctx, &appearance(true)),
         }
         nodalia_theme::engineering::apply_text_styles(ctx);
+    }
+
+    /// List the installed fonts off the window thread, once.
+    pub fn scan_fonts(&mut self) {
+        if self.fonts.is_some() || self.fonts_scanning {
+            return;
+        }
+        self.fonts_scanning = true;
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::Fonts(crate::fonts::scan()));
+            ctx.request_repaint();
+        });
+    }
+
+    /// Hand egui the code font and the zoom the settings ask for, when they changed.
+    fn apply_fonts_and_scale(&mut self, ctx: &egui::Context) {
+        let scale = self.settings.ui_scale;
+        if self.applied_scale != Some(scale) {
+            self.applied_scale = Some(scale);
+            ctx.set_zoom_factor(scale);
+        }
+        let family = self.settings.font_family.clone();
+        if self.applied_font.as_deref() == Some(family.as_str()) {
+            return;
+        }
+        if family.is_empty() {
+            crate::fonts::install(ctx, "", &[]);
+            self.applied_font = Some(family);
+            return;
+        }
+        self.scan_fonts();
+        let Some(known) = self.fonts.clone() else {
+            return;
+        };
+        self.applied_font = Some(family.clone());
+        if !crate::fonts::install(ctx, &family, &known) {
+            self.toast(trf("The font {} could not be loaded.", &[&family]));
+        }
     }
 
     pub fn sender(&self) -> Sender<Msg> {
@@ -975,6 +1027,10 @@ impl App {
                 Msg::Gh(msg) => crate::github_ui::on_msg(self, msg),
                 Msg::Ai(msg) => crate::ai_ui::on_msg(self, msg),
                 Msg::Pick(reply) => crate::dialogs::on_reply(self, reply),
+                Msg::Fonts(list) => {
+                    self.fonts_scanning = false;
+                    self.fonts = Some(list);
+                }
                 Msg::Marks(path, marks) => {
                     for tab in &mut self.tabs {
                         if tab.doc.path() == Some(path.as_path()) {
@@ -1305,7 +1361,10 @@ impl App {
                 }
             }
 
-            Preferences => self.overlay = Overlay::Preferences,
+            Preferences => {
+                self.overlay =
+                    Overlay::Preferences(Box::new(crate::prefs_ui::PrefsState::new(self)))
+            }
             KeyboardShortcuts => self.overlay = Overlay::Shortcuts(String::new()),
             About => self.overlay = Overlay::About,
         }
@@ -1643,9 +1702,18 @@ impl App {
         }
     }
 
-    pub fn editor_options(&self) -> editor::Options {
+    pub fn editor_options(&self, palette: &nodalia_theme::Palette) -> editor::Options {
         editor::Options {
             font_size: self.settings.font_size,
+            line_height: self.settings.line_height,
+            colors: std::sync::Arc::new(crate::syntax_theme::editor_colors(
+                &self.settings,
+                palette,
+            )),
+            cursor: self.settings.cursor_style,
+            cursor_blink: self.settings.cursor_blink,
+            rulers: self.settings.rulers.clone(),
+            indent_guides: self.settings.indent_guides,
             word_wrap: self.settings.word_wrap,
             line_numbers: self.settings.line_numbers,
             highlight_line: self.settings.highlight_active_line,
@@ -1769,6 +1837,7 @@ impl eframe::App for App {
             crate::dialogs::start(self, frame, req);
         }
         self.apply_appearance(&ctx);
+        self.apply_fonts_and_scale(&ctx);
         self.updates.tick(&ctx);
         self.poll();
         self.sync_language_servers();

@@ -911,7 +911,8 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
     let focus = std::mem::take(&mut app.focus_editor)
         && matches!(app.overlay, Overlay::None)
         && !app.find.focus;
-    let opts = app.editor_options();
+    let opts = app.editor_options(&look.palette);
+    let editor_look = crate::syntax_theme::editor_look(look, &opts.colors);
     let now = ui.ctx().input(|i| i.time);
     let rect = ui.available_rect_before_wrap();
     let ctx = ui.ctx().clone();
@@ -936,7 +937,17 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         .as_ref()
         .map(|s| (s.left, s.right, s.right_focused))
     else {
-        let output = draw_pane(ui, app, rect, app.active, false, &opts, look, focus, now);
+        let output = draw_pane(
+            ui,
+            app,
+            rect,
+            app.active,
+            false,
+            &opts,
+            &editor_look,
+            focus,
+            now,
+        );
         if let Some(output) = output {
             app.editor_output(&ctx, output);
         }
@@ -963,7 +974,7 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         left_index,
         false,
         &opts,
-        look,
+        &editor_look,
         focus && !right_focused,
         now,
     );
@@ -974,7 +985,7 @@ fn workspace(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>) {
         right_index,
         twin,
         &opts,
-        look,
+        &editor_look,
         focus && right_focused,
         now,
     );

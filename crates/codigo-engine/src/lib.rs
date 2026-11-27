@@ -23,6 +23,7 @@ pub mod session;
 pub mod settings;
 pub mod snippets;
 pub mod tasks;
+pub mod theme;
 
 pub use codigo_lsp::CompletionItem;
 pub use codigo_lsp::Severity;
