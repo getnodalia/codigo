@@ -21,6 +21,9 @@ pub struct Task {
     pub label: String,
     pub program: String,
     pub args: Vec<String>,
+    /// The folder to run in when it is not the project's own: a project nested below the
+    /// opened folder.
+    pub cwd: Option<PathBuf>,
 }
 
 impl TaskKind {
@@ -61,6 +64,7 @@ impl Task {
             label,
             program: program.to_owned(),
             args: vec![flag.to_owned(), command.to_owned()],
+            cwd: None,
         }
     }
 
@@ -75,6 +79,7 @@ impl Task {
             label,
             program: program.to_owned(),
             args: args.iter().map(|a| (*a).to_owned()).collect(),
+            cwd: None,
         }
     }
 }
@@ -104,10 +109,29 @@ pub fn resolve(root: &Path, active: Option<&Path>, kind: TaskKind) -> Option<Tas
     if let Some(task) = pick(&tasks, kind) {
         return Some(task.clone());
     }
+    // A file inside a project nested below the opened folder runs with that project's own tools:
+    // `cargo run`, not a bare compiler on one file.
+    if let Some(dir) = active.and_then(|file| nested_project(root, file)) {
+        let tasks = detect(&dir);
+        if let Some(task) = pick(&tasks, kind) {
+            let mut task = task.clone();
+            task.cwd = Some(dir);
+            return Some(task);
+        }
+    }
     if kind == TaskKind::Run {
         return active.and_then(for_file);
     }
     None
+}
+
+/// The nearest folder above `file` and below `root` that has tasks of its own.
+fn nested_project(root: &Path, file: &Path) -> Option<PathBuf> {
+    file.ancestors()
+        .skip(1)
+        .take_while(|dir| *dir != root && dir.starts_with(root))
+        .find(|dir| !detect(dir).is_empty())
+        .map(Path::to_path_buf)
 }
 
 /// The tasks the person saved for this project in `.codigo/tasks.json`.
@@ -444,7 +468,11 @@ mod tests {
     fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().expect("dir");
         for (name, text) in files {
-            std::fs::write(dir.path().join(name), text).expect("write");
+            let path = dir.path().join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("folder");
+            }
+            std::fs::write(path, text).expect("write");
         }
         dir
     }
@@ -613,5 +641,22 @@ mod tests {
             pick(&detect(dir.path()), TaskKind::Run).map(|t| t.label.as_str()),
             Some("node server.js")
         );
+    }
+
+    #[test]
+    fn a_file_in_a_nested_project_runs_that_projects_task() {
+        let dir = project(&[
+            ("lab/Cargo.toml", "[package]"),
+            ("lab/src/main.rs", "fn main() {}"),
+        ]);
+        let file = dir.path().join("lab/src/main.rs");
+        let task = resolve(dir.path(), Some(&file), TaskKind::Run).expect("task");
+        assert_eq!(task.label, "cargo run");
+        assert_eq!(task.cwd, Some(dir.path().join("lab")));
+        // A lone file outside any project still runs as it is.
+        let lone = dir.path().join("x.rs");
+        let task = resolve(dir.path(), Some(&lone), TaskKind::Run).expect("task");
+        assert!(task.label.starts_with("rustc"));
+        assert_eq!(task.cwd, None);
     }
 }

@@ -51,6 +51,9 @@ mod widgets;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    // From the Finder or a launcher the program has no terminal's PATH: `cargo` and language
+    // servers would not be found. Done first, before any thread exists.
+    codigo_engine::login_env::adopt();
     let mut open: Vec<std::path::PathBuf> = Vec::new();
     for arg in std::env::args().skip(1) {
         match arg.as_str() {

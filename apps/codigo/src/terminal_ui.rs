@@ -150,7 +150,7 @@ pub fn run_task(app: &mut App, ctx: &egui::Context, kind: TaskKind) {
     let spec = Spec {
         program: task.program.clone(),
         args: task.args.clone(),
-        cwd: root,
+        cwd: task.cwd.clone().unwrap_or(root),
         env: Vec::new(),
     };
     let label = task.label.clone();

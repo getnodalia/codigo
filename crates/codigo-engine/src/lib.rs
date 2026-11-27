@@ -16,6 +16,7 @@
 
 pub mod command;
 pub mod document;
+pub mod login_env;
 pub mod lsp;
 pub mod paths;
 pub mod session;

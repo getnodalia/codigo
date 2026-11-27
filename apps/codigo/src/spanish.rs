@@ -341,6 +341,7 @@ pub const SPANISH: &[(&str, &str)] = &[
     ("Reading the file…", "Leyendo el archivo…"),
     ("Reading the project…", "Leyendo el proyecto…"),
     ("Reading the repository…", "Leyendo el repositorio…"),
+    ("Reason: {}", "Motivo: {}"),
     ("Recent folders", "Carpetas recientes"),
     ("Redo", "Rehacer"),
     ("Reduce motion", "Reducir movimiento"),
