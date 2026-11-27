@@ -1,149 +1,153 @@
-# Código
+<div align="center">
+  <a href="https://getnodalia.com">
+    <img src="https://raw.githubusercontent.com/getnodalia/nodalia-web/main/assets/brand/nodalia-wordmark-badge.svg" width="150" alt="Nodalia">
+  </a>
+  <br><br>
+  <img src="assets/icons/hicolor/512x512/apps/dev.danielmiguelt.Codigo.png" width="192" alt="Código">
+  <h1>Código</h1>
+  <p><strong>The code editor of the Nodalia suite.</strong></p>
 
-Código is Nodalia's code editor and part of its Engineering suite: a fast, native editor for any
-language, drawn in the Nodalia Design Language and written entirely in Rust. It does not run on Electron, Chromium or a web view.
+  <p>
+    <img src="https://img.shields.io/badge/status-early%20stage-orange" alt="Early stage">
+    <img src="https://img.shields.io/badge/Rust-native-dea584?logo=rust&logoColor=black" alt="Native Rust">
+    <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-2ea44f" alt="MIT OR Apache-2.0">
+  </p>
 
-> Código is at an early stage (0.6). This page describes only what runs today;
-> what is planned is in [ROADMAP.md](ROADMAP.md).
+  <p>
+    <a href="#overview">Overview</a> ·
+    <a href="#screenshots">Screenshots</a> ·
+    <a href="#what-it-does">What it does</a> ·
+    <a href="#download">Download</a> ·
+    <a href="#build-and-run">Build</a> ·
+    <a href="#project-status">Status</a> ·
+    <a href="#the-nodalia-suite">Suite</a> ·
+    <a href="#license">License</a>
+  </p>
+</div>
 
-## What it does today
+<p align="center">
+  <img src="https://raw.githubusercontent.com/getnodalia/nodalia-web/main/assets/screens/codigo/codigo-terminal.jpg" width="100%" alt="Código in its dark theme with a Rust project open: the file explorer on the left, the editor with a type error underlined and the run console below it showing the compiler's message">
+</p>
+
+---
+
+## Overview
+
+**Código** is the code editor of [Nodalia](https://getnodalia.com): a fast, native editor for any
+language, with language servers, a terminal, a debugger, git and GitHub in the window, and code
+quality and security checks built in. It is written entirely in Rust, with no Electron, Chromium or
+web view, with no account and no cloud, and it wears Nodalia Design: rounded islands, the suite's
+line icons in Código's green, and the suite's own window controls on Linux.
+
+> [!IMPORTANT]
+> **Código is at an early stage (0.6).** This page describes only what runs today; what is planned
+> is in [`ROADMAP.md`](ROADMAP.md). Expect rough edges, and keep your work under version control.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="https://raw.githubusercontent.com/getnodalia/nodalia-web/main/assets/screens/codigo/codigo-quality.jpg" alt="The Quality tab listing a hard-coded password, a shell command built from text and a weak hash, with the offending line highlighted" width="100%"><p align="center"><sub><b>Quality and security</b>, built in: secrets, unsafe patterns and copied code, worst first, under a quality gate.</sub></p></td>
+<td width="50%" valign="top"><img src="https://raw.githubusercontent.com/getnodalia/nodalia-web/main/assets/screens/codigo/codigo-nodalia-app.jpg" alt="A new Nodalia app created from the Nodalia menu, open in the editor" width="100%"><p align="center"><sub><b>New Nodalia app</b>: a Rust egui app in Nodalia Design, with the lints and CI the other apps use.</sub></p></td>
+</tr>
+</table>
+
+## What it does
 
 - **A text editor built for speed.** Only the rows on screen are laid out, so a file of a million
-  lines (45 MB) opens and scrolls without trouble. Multiple cursors and selections, word wrap, find and replace with a
-  match count, line operations (move, duplicate, delete, join, comment, indent), unlimited undo and
-  Unicode that behaves: grapheme-aware movement, wide characters, and the file's encoding and line
-  endings kept when you save.
-- **Syntax highlighting for 15 languages** through tree-sitter: Rust, Python, JavaScript,
-  TypeScript, JSON, TOML, Markdown, Bash, C, C++, Go, Java, HTML, CSS and YAML. Other files open as
-  plain text, and the status bar lets you pick a language by hand.
-- **Errors as you type.** With a language server installed (rust-analyzer, pyright, gopls,
-  clangd, typescript-language-server and others), Código underlines what it reports, shows the
-  message under the pointer and counts errors and warnings in the status bar. The Problems panel
-  (`Ctrl+Shift+M`, or a click on the counts) lists them for every file, errors first, and a click
-  opens the place. It never installs a
-  server for you, and the setting can be turned off in Preferences. Hover (`Ctrl+Shift+Space`),
-  completion (`Ctrl+Space`, and as you type) and go to definition (`F12`) work too, and so do
-  find references (`Shift+F12`), rename symbol (`F2`, changing every file the server names) and format document (`Alt+Shift+F`).
-- **Snippets with places to fill in.** Type a word such as `fn` or `for` and press `Tab`: the
-  snippet opens with its placeholders, `Tab` and `Shift+Tab` move between them and every copy of a
-  repeated one changes together. Código ships snippets for its languages and reads your own from
-  `snippets.json` in its configuration folder (*Edit snippets* opens it).
-- **A minimap and a split editor.** A scaled picture of the file sits beside the editor, with the
-  part on screen, the lines changed against git and the problems marked; click or drag to scroll
-  (it can be turned off in Preferences). `Ctrl+\` splits the editor in two, to read one file
-  while editing another or to see two places of the same file.
-- **Files that open at once.** Opening a file no longer waits for anything: big files are read
-  and parsed off the window, the text shows first and the colours arrive a moment later, and only
-  the part of a very long line that is on screen is laid out.
-- **A terminal and a run console.** The top bar has Run, Stop and Terminal buttons next to the
-  palette. `Ctrl+\`` opens a real terminal under the editor, with tabs,
-  colours, history and the project folder as its working directory. `F5` runs the project
-  (`cargo run`, `npm start`, `go run .`, `python main.py`, Gradle, Maven, CMake, Make targets,
-  Deno, Zig, Swift, Elixir, Flutter, Ruby, PHP and more, chosen from what the folder contains,
-  or from the file you have open) in a tab of its own, and Build, Test and Check are in the Run
-  menu. If nothing is recognised, Código asks once how to run it and remembers the answer in the
-  project's `.codigo` folder. A
-  `path:line:column` in the output is a link: click it to open that place.
-- **A debugger.** The bug button next to Run (`F6`) builds the project and runs it under a
-  debugger through the Debug Adapter Protocol: `lldb-dap` or GDB 14+ for Rust, C and C++, `dlv` for
-  Go and `debugpy` for Python (the last two are not tried against a real session yet). Click the
-  margin of the editor (or `F9`) to set breakpoints; when the program stops, the line is
-  highlighted and the Debug panel shows the call stack, the variables (click to open them), an
-  expression field and the program's output. Continue (`F8`), step over (`F10`), into (`F11`),
-  out (`Shift+F11`) and Stop (`Shift+F6`) are in the top bar and the Run menu. A lone file can be
-  debugged too, and when the program to debug is not recognised Código asks once and remembers.
-  Código installs no debugger: when one is missing it says which to install. Conditional breakpoints and persistent
-  watches are not there yet.
-- **Git, in the window.** The Source control panel (`Ctrl+Shift+G`) shows the changes of the
-  open repository, opens the diff of a file, stages and unstages, discards (with a second click to
-  confirm), commits (`Ctrl+Enter` in the message box), switches and creates branches, and
-  fetches, pulls and pushes. A diff can be staged by hunk (a button on each hunk stages,
-  unstages or discards just that part), changes can be stashed and the latest stash applied, a branch can be
-  merged into the current one, and when a merge leaves conflicts a window lists each block of a
-  conflicted file and keeps *current*, *incoming* or *both* one block at a time before you mark
-  the file resolved. *Show who changed each line* (`Ctrl+Alt+B`) writes the author, date and
-  subject of the last change at the end of the cursor's line. Git is run as the `git` program on
-  your computer, so your SSH keys and credential helper work as always.
-- **GitHub, in the window.** The GitHub panel (`Ctrl+Shift+H`) lists the open pull requests and
-  issues of the repository you are in, the pull requests you opened or that wait for your review,
-  and your repositories. A pull request opens in its own window with its description, checks,
-  files and diffs and conversation, and you can comment, approve or request changes, or check its
-  branch out. *Clone repository…* (on the welcome page and in the GitHub menu) takes an address or
-  `owner/name` and opens the clone. Sign in with the GitHub CLI session or a personal access
-  token; the token is kept in the system's keyring and nowhere else. Signing in from the browser
-  (device flow) is built in but needs a GitHub OAuth app, so it only shows when
-  `CODIGO_GITHUB_CLIENT_ID` is set. Código ships no one else's client. Status, diffs, staging,
-  committing, cloning and reads of public GitHub data have been tried; reviews, saving to the
-  keyring and the browser sign-in have not been run against a real account. *Create a pull
-  request…* pushes the current branch and opens a pull request from it, and in a pull request's
-  diff a click on a line's number opens a comment on that line (shown as a dot, with its thread
-  and a box to reply). Both go through the GitHub API and have not been run against a real
-  repository either.
-- **Code quality and security, built in.** The Quality tab (`Ctrl+Shift+Y`) analyses the folder
-  with no server to run and nothing leaving your computer: hard-coded secrets (private keys,
-  cloud tokens, passwords), unsafe patterns (`eval`, shell commands from strings, SQL built from
-  text, disabled TLS checks, weak hashes, unsafe C functions, `innerHTML`), Rust shortcuts that
-  can panic, functions that are too long, too branching or take too many parameters, and blocks
-  of code that were copied. Findings are listed worst first under a quality gate, and a click
-  opens the exact place. Put `codigo-ignore` on a line to silence it. Fixes from the editor and
-  dependency advisories are not there yet.
-- **Tools for building Nodalia apps.** The Nodalia menu has *New Nodalia app*: it creates a Rust
-  egui app in the Nodalia Design Language with the shared theme, an About window, Spanish and
-  English with the test that checks every string, the lints and the CI the other apps use, and
-  opens it. In a folder that depends on the Nodalia theme, the Quality tab also checks Nodalia's
-  engineering rules: colours written in the code instead of taken from the tokens, interface text
-  that skips `tr()`, strings missing from the `SPANISH` table, and files without a licence header.
-  A theme and token preview and helpers for icons are not there yet.
-- **AI assistants, with your own key.** The Assistant panel (`Ctrl+Alt+I`) chats about the open
-  file or your selection, and *Explain*, *Fix*, *Refactor*, *Document* and *Write tests for this
-  code* in the Assistant menu send what is selected (or the file) with that instruction; when the
-  answer is a change, *Apply* puts it in the editor, where it can be undone. Pick Anthropic,
-  OpenAI, Ollama or any OpenAI-compatible address in *Assistant settings…*. Código ships no key
-  and no account: the key is kept in the system's keyring, is sent only to the provider's own
-  host (over https, or to your own computer) and never appears in an error, and nothing is sent
-  until you ask. Tried end to end against a local OpenAI-compatible server; the real Anthropic
-  and OpenAI services and the keyring have not been tried.
-- **Files you can tell apart.** Every file type has its own drawn symbol in the explorer and in
-  the tabs, so you find the Rust, the Python or the Dockerfile at a glance.
-- **Projects.** Open a folder to get a file explorer that respects `.gitignore` and shows git status
-  in colour, quick open by fuzzy file name (`Ctrl+P`), search across the project (`Ctrl+Shift+F`)
-  and a command palette (`Ctrl+Shift+P`) that reaches every command.
-- **Pick up where you left off.** Tabs, the folder, the sidebar and recent folders come back at the
+  lines opens and scrolls without trouble. Multiple cursors, find and replace, unlimited undo, and
+  Unicode that behaves: the file's encoding and line endings are kept when you save.
+- **Syntax highlighting for 15 languages** through tree-sitter, from Rust, Python and TypeScript to
+  Go, C++, HTML and YAML. Other files open as plain text.
+- **Language servers.** With one installed, Código underlines errors as you type, lists them in the
+  Problems panel and offers hover, completion, go to definition, find references, rename symbol and
+  format document. It never installs a server for you.
+- **A terminal and a run console.** `F5` runs the project, chosen from what the folder contains
+  (Cargo, npm, Go, Python, Gradle, CMake, Make and more), and a `path:line:column` in the output is
+  a link.
+- **A debugger** through the Debug Adapter Protocol, with breakpoints, a call stack and variables.
+  Código installs no debugger: when one is missing it says which to install.
+- **Git and GitHub, in the window.** Stage by hunk, commit, branch, merge and resolve conflicts,
+  and read, review and check out pull requests. Git is the `git` program on your computer, so your
+  SSH keys and credential helper work as always.
+- **Code quality and security, built in.** The Quality tab analyses the folder on your computer,
+  with no server to run and nothing leaving it.
+- **AI assistants, with your own key.** Chat about the open file and explain, fix, refactor or
+  document a selection with Anthropic, OpenAI, Ollama or any OpenAI-compatible address. Código
+  ships no key and no account, and nothing is sent until you ask.
+- **Tools for building Nodalia apps.** *New Nodalia app* creates a Rust egui app in Nodalia Design,
+  and the Quality tab also checks Nodalia's engineering rules in a folder that uses the theme.
+- **Projects and workspace.** A file explorer that respects `.gitignore`, quick open (`Ctrl+P`),
+  search across the project, a command palette and a minimap, with tabs and folders restored at the
   next launch.
 - **Nodalia Design.** Light, dark and high-contrast themes, round window controls on Linux (native
   ones on macOS and Windows), a global menu over D-Bus on Linux, a reduced-motion option and an
-  in-app update check.
-- **Spanish and English**, following your system language or your choice in Preferences.
+  in-app update check, in English and Spanish.
+
+The full list, with every shortcut and what has and has not been tried against a real service, is
+in [`docs/features.md`](docs/features.md).
 
 ## Download
 
-Each release at [github.com/getnodalia/codigo/releases](https://github.com/getnodalia/codigo/releases)
-carries an AppImage, `.deb`, `.rpm` and tarball for Linux (x86-64), a universal DMG for macOS 11 and
-later, and, for Windows 10/11 (x64), an installer (`.msi`, for you only, no administrator rights)
-and a portable zip. The macOS and Windows builds are not signed, so
-the system asks for confirmation the first time they open.
+Packages for Linux, macOS and Windows are on the
+[releases page](https://github.com/getnodalia/codigo/releases/latest) and at
+[getnodalia.com/codigo](https://getnodalia.com/codigo). The macOS and Windows builds are not
+signed, so the system asks for confirmation the first time they open.
 
-## Build
+[Nodalia Launcher](https://getnodalia.com/launcher) installs it and keeps it up to date too.
+
+| Platform | Files |
+|---|---|
+| Linux (x86-64) | `.AppImage`, `.deb`, `.rpm` and `.tar.gz` |
+| macOS (11 or later) | a universal `.dmg` |
+| Windows 10 and 11 (x64) | an `.msi` installer, for you only and with no administrator rights, and a portable `.zip` |
+
+## Build and run
+
+You need a recent stable Rust toolchain. Linux also needs the usual development packages for
+windowing (`libxkbcommon`, `libwayland`, `libx11`, `libgl`, `libfontconfig`, `libdbus`).
 
 ```bash
-cargo run -p codigo-app -- path/to/folder-or-file
+git clone https://github.com/getnodalia/codigo.git
+cd codigo
+cargo run --release -p codigo-app -- path/to/folder-or-file
 ```
 
-Linux needs the usual development packages for windowing (`libxkbcommon`, `libwayland`, `libx11`,
-`libgl`, `libfontconfig`, `libdbus`). The gate that CI runs:
+The gate that CI runs:
 
 ```bash
 cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked
 ```
 
-## Layout
+## Project status
 
-`crates/codigo-text` (buffer, selections, edits, history, search), `crates/codigo-syntax`
-(languages and highlighting), `crates/codigo-lsp` (language server client), `crates/codigo-term` (terminal), `crates/codigo-quality` (quality and security analysis), `crates/codigo-nodalia` (project templates for Nodalia apps), `crates/codigo-workspace` (folders, fuzzy matching, project search,
-git), `crates/codigo-engine` (documents, commands, settings, session) and `apps/codigo` (the egui
-app). See [AGENTS.md](AGENTS.md) for the rules the code follows.
+| Area | State |
+|---|---|
+| Editor, language servers, terminal, run console | Working |
+| Debugger | Working with `lldb-dap` or GDB 14+; `dlv` and `debugpy` not tried against a real session yet |
+| Git | Working |
+| GitHub | Status, diffs, staging, committing, cloning and public reads tried; reviews, the keyring and browser sign-in not yet run against a real account |
+| AI assistants | Tried against a local OpenAI-compatible server; the Anthropic and OpenAI services not yet |
+| App icon | Done: portrait of Grace Hopper |
+| Nodalia interface | Done: Nodalia theme and icons, rounded islands, main menu, Nodalia window controls on Linux |
+| Global menu | Done on Linux (D-Bus), in the top bar of the shell |
+| Installable packages | Linux, macOS (DMG) and Windows (MSI and zip), with an in-app update check |
 
-## Licence
+## App icon
 
-`MIT OR Apache-2.0` ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)). Assets and their
-licences are listed in [ATTRIBUTION.md](ATTRIBUTION.md).
+Nodalia app icons are black-and-white portraits of historical figures over the app colour.
+Código's is Grace Hopper, who wrote the first compiler. Provenance and licence are in
+[`ATTRIBUTION.md`](ATTRIBUTION.md).
+
+## The Nodalia suite
+
+Código is one of the applications of [Nodalia](https://getnodalia.com), an independent software
+project developed in public by [Daniel Miguel Tejedor](https://danielmigueltejedor.com). It belongs
+to the Engineering suite, with Forja, Torno, Vortia, Circuito and Ábaco.
+
+The code follows the rules in [`AGENTS.md`](AGENTS.md); security is in
+[`SECURITY.md`](SECURITY.md).
+
+## License
+
+`MIT OR Apache-2.0`. See [`LICENSE-MIT`](LICENSE-MIT) and [`LICENSE-APACHE`](LICENSE-APACHE).
