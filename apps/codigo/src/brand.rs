@@ -100,11 +100,11 @@ mod tests {
             assert_eq!(w, h, "{brand:?}");
             assert_eq!(rgba.len(), w * h * 4);
             assert!(
-                rgba.chunks_exact(4).any(|p| p[3] == 255),
+                rgba.as_chunks::<4>().0.iter().any(|p| p[3] == 255),
                 "{brand:?} has ink"
             );
             assert!(
-                rgba.chunks_exact(4).any(|p| p[3] == 0),
+                rgba.as_chunks::<4>().0.iter().any(|p| p[3] == 0),
                 "{brand:?} has room"
             );
         }
