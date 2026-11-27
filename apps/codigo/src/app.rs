@@ -36,7 +36,10 @@ pub enum Msg {
     Blame(PathBuf, u64, Vec<codigo_git::BlameLine>),
     Quality(u64, codigo_quality::Report),
     /// The program to debug was built and a debugger found, or why not.
-    DebugSpec(u64, Result<codigo_dap::LaunchSpec, String>),
+    DebugSpec(
+        u64,
+        Result<codigo_dap::LaunchSpec, crate::debug_ui::Failure>,
+    ),
     /// Nothing to debug was recognised: ask the person what to start.
     DebugAsk(u64, String),
     /// A big file was read off the window thread.
@@ -45,6 +48,8 @@ pub enum Msg {
     Vcs(crate::vcs_ui::GitMsg),
     /// GitHub answered on a worker thread.
     Gh(crate::github_ui::GhMsg),
+    /// GitLab answered on a worker thread.
+    Gl(crate::gitlab_ui::GlMsg),
     /// The assistant answered on a worker thread.
     Ai(crate::ai_ui::AiMsg),
     /// A file chooser was closed, or could not open.
@@ -94,6 +99,7 @@ pub enum Panel {
     Debug,
     Git,
     GitHub,
+    GitLab,
     Assistant,
 }
 
@@ -196,6 +202,8 @@ pub struct App {
     pub vcs: crate::vcs_ui::GitPanel,
     /// GitHub: the account, and the lists the panel shows.
     pub gh: crate::github_ui::GithubPanel,
+    /// GitLab: the account, and the lists the panel shows.
+    pub gl: crate::gitlab_ui::GitlabPanel,
     pub ai: crate::ai_ui::AiPanel,
     /// A language-server question waiting for its answer.
     pub query: Option<crate::lsp_ui::InFlight>,
@@ -294,6 +302,7 @@ impl App {
             debug: crate::debug_ui::DebugPanel::default(),
             vcs: crate::vcs_ui::GitPanel::default(),
             gh: crate::github_ui::GithubPanel::default(),
+            gl: crate::gitlab_ui::GitlabPanel::default(),
             ai: crate::ai_ui::AiPanel::default(),
             query: None,
             popup: crate::lsp_ui::Popup::None,
@@ -846,6 +855,7 @@ impl App {
         self.panel = Panel::Explorer;
         self.vcs = crate::vcs_ui::GitPanel::default();
         self.gh.repo = None;
+        crate::gitlab_ui::set_origin(self, None);
         self.refresh_git();
         crate::vcs_ui::refresh(self);
         self.list_files();
@@ -1025,6 +1035,7 @@ impl App {
                 Msg::Opened(job, result) => self.opened(job, result),
                 Msg::Vcs(msg) => crate::vcs_ui::on_msg(self, msg),
                 Msg::Gh(msg) => crate::github_ui::on_msg(self, msg),
+                Msg::Gl(msg) => crate::gitlab_ui::on_msg(self, msg),
                 Msg::Ai(msg) => crate::ai_ui::on_msg(self, msg),
                 Msg::Pick(reply) => crate::dialogs::on_reply(self, reply),
                 Msg::Fonts(list) => {
@@ -1339,6 +1350,12 @@ impl App {
             GitHubRefresh => crate::github_ui::refresh(self),
             CloneRepository => crate::github_ui::open_clone(self),
             GitHubCreatePull => crate::github_ui::open_create_pull(self),
+            GitLabShow => crate::gitlab_ui::show(self),
+            GitLabSignIn => crate::gitlab_ui::sign_in(self),
+            GitLabSignOut => crate::gitlab_ui::sign_out(self),
+            GitLabRefresh => crate::gitlab_ui::refresh(self),
+            GitLabCreateMergeRequest => crate::gitlab_ui::open_create_merge_request(self),
+            GitLabClone => crate::gitlab_ui::open_clone(self),
             AiShow => crate::ai_ui::show(self),
             AiExplain => crate::ai_ui::task(self, codigo_ai::prompts::Task::Explain),
             AiFix => crate::ai_ui::task(self, codigo_ai::prompts::Task::Fix),

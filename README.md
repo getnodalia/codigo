@@ -67,8 +67,9 @@ line icons in Código's green, and the suite's own window controls on Linux.
   a link.
 - **A debugger** through the Debug Adapter Protocol, with breakpoints, a call stack and variables.
   Código installs no debugger: when one is missing it says which to install.
-- **Git and GitHub, in the window.** Stage by hunk, commit, branch, merge and resolve conflicts,
-  and read, review and check out pull requests. Git is the `git` program on your computer, so your
+- **Git, GitHub and GitLab, in the window.** Stage by hunk, commit, branch, merge and resolve
+  conflicts, and read, review and check out pull requests and merge requests (gitlab.com or your own
+  server), with the services' own marks. Git is the `git` program on your computer, so your
   SSH keys and credential helper work as always.
 - **Code quality and security, built in.** The Quality tab analyses the folder on your computer,
   with no server to run and nothing leaving it.
@@ -129,6 +130,7 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets --locked --
 | Editor, language servers, terminal, run console | Working |
 | Debugger | Working with `lldb-dap` or GDB 14+; `dlv` and `debugpy` not tried against a real session yet |
 | Git | Working |
+| GitLab | Sign-in error path tried against gitlab.com; lists, comments, approvals, merge request creation, the keyring and private clones not yet run against a real account |
 | GitHub | Status, diffs, staging, committing, cloning and public reads tried; reviews, the keyring and browser sign-in not yet run against a real account |
 | AI assistants | Tried against a local OpenAI-compatible server; the Anthropic and OpenAI services not yet |
 | App icon | Done: portrait of Alan Turing |

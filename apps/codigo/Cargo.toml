@@ -24,6 +24,7 @@ codigo-dap.workspace = true
 codigo-ai.workspace = true
 codigo-git.workspace = true
 codigo-github.workspace = true
+codigo-gitlab.workspace = true
 codigo-quality.workspace = true
 codigo-nodalia.workspace = true
 eframe.workspace = true

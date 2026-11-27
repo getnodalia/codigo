@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use codigo_dap::{
-    adapters_for, prepare, Command, Debugger, LaunchSpec, Prepare, ScopeVars, StopInfo, Update,
-    Variable,
+    adapters_for, prepare, Command, Debugger, Install, LaunchSpec, Missing, Prepare, ScopeVars,
+    StopInfo, Update, Variable,
 };
 use egui::{CornerRadius, FontId, RichText, ScrollArea, Sense, TextEdit, Ui};
 use nodalia_theme::creator::Look;
@@ -68,6 +68,32 @@ pub struct DebugPanel {
     pub serial: u64,
     /// Why the last session could not start or ended badly.
     pub notice: Option<String>,
+    /// The language has no debugger on this computer, and how to get one.
+    pub missing: Option<Missing>,
+}
+
+/// Why a session could not be prepared.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Failure {
+    /// The build or the project said so, in its own words.
+    Text(String),
+    /// No debugger is installed.
+    Missing(Missing),
+}
+
+/// What to tell somebody who has no debugger yet, in the interface's language.
+pub fn missing_hint(install: &Install) -> &'static str {
+    match install {
+        Install::XcodeTools => tr(
+            "Install Apple's developer tools: they bring the debugger. Then press F6 again.",
+        ),
+        Install::XcodeToolsOld => tr(
+            "The developer tools here are too old to carry the debugger. Update them to Xcode 16 or newer, or install LLVM with Homebrew.",
+        ),
+        Install::Command(_) => tr("Install the debugger from a terminal, then press F6 again."),
+        Install::Python => tr("Install Python, then its debugger, and press F6 again."),
+        Install::Unsupported => tr("Código can debug Rust, C, C++, Python and Go so far."),
+    }
 }
 
 impl DebugPanel {
@@ -287,6 +313,7 @@ pub fn start(app: &mut App) {
         .collect();
     app.debug.phase = Phase::Preparing;
     app.debug.notice = None;
+    app.debug.missing = None;
     app.debug.output.clear();
     app.debug.evals.clear();
     app.debug.serial += 1;
@@ -300,15 +327,17 @@ pub fn start(app: &mut App) {
         .spawn(move || {
             let msg = match prepare(&root, active.as_deref()) {
                 Err(Prepare::Unknown(note)) => Msg::DebugAsk(serial, note),
-                Err(Prepare::Failed(e)) => Msg::DebugSpec(serial, Err(e)),
+                Err(Prepare::Failed(e)) => Msg::DebugSpec(serial, Err(Failure::Text(e))),
                 Ok(target) => {
                     let spec = adapters_for(target.language)
-                        .map_err(|m| m.to_string())
+                        .map_err(Failure::Missing)
                         .and_then(|found| {
-                            found
-                                .into_iter()
-                                .next()
-                                .ok_or_else(|| format!("no debugger found for {}", target.language))
+                            found.into_iter().next().ok_or_else(|| {
+                                Failure::Missing(Missing {
+                                    language: target.language.to_string(),
+                                    install: Install::Unsupported,
+                                })
+                            })
                         })
                         .map(|adapter| LaunchSpec {
                             adapter,
@@ -330,7 +359,7 @@ pub fn start(app: &mut App) {
 }
 
 /// The program was built and a debugger found: start the session.
-pub fn launch(app: &mut App, serial: u64, spec: Result<LaunchSpec, String>) {
+pub fn launch(app: &mut App, serial: u64, spec: Result<LaunchSpec, Failure>) {
     if serial != app.debug.serial || app.debug.phase != Phase::Preparing {
         return;
     }
@@ -341,10 +370,15 @@ pub fn launch(app: &mut App, serial: u64, spec: Result<LaunchSpec, String>) {
             app.debug.session = Some(Debugger::start(spec, Some(waker)));
             app.debug.phase = Phase::Running;
         }
-        Err(e) => {
+        Err(Failure::Text(e)) => {
             app.debug.reset();
             app.debug.notice = Some(e.clone());
             app.toast(e);
+        }
+        Err(Failure::Missing(m)) => {
+            app.debug.reset();
+            app.toast(trf("No debugger found for {}.", &[&m.language]));
+            app.debug.missing = Some(m);
         }
     }
 }
@@ -402,6 +436,64 @@ pub fn toggle_at_caret(app: &mut App) {
 #[derive(Default)]
 pub struct Outcome {
     pub open: Option<(PathBuf, usize)>,
+    /// "Try again" after installing a debugger.
+    pub retry: bool,
+}
+
+/// What a missing debugger looks like: what is wrong, how to fix it, and the buttons to do it.
+/// True when the person asked to try again.
+fn missing_view(ui: &mut Ui, look: &Look, m: &Missing) -> bool {
+    use nodalia_theme::creator as cr;
+    let p = look.palette;
+    let mut retry = false;
+    ui.add_space(6.0);
+    ui.label(
+        RichText::new(trf("No debugger found for {}.", &[&m.language]))
+            .strong()
+            .color(color(p.status_danger_fg)),
+    );
+    ui.label(
+        RichText::new(missing_hint(&m.install))
+            .size(font_size::SMALL)
+            .color(color(p.text_secondary)),
+    );
+    if let Some(command) = m.install.command() {
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(&command)
+                    .font(FontId::monospace(font_size::SMALL))
+                    .color(color(p.text_primary)),
+            );
+        });
+        ui.horizontal_wrapped(|ui| {
+            if cr::secondary_button(ui, look, tr("Copy the command"), true).clicked() {
+                ui.ctx().copy_text(command.clone());
+            }
+            if m.install == Install::XcodeTools
+                && cr::primary_button(ui, look, tr("Install the developer tools"), true).clicked()
+            {
+                install_xcode_tools();
+            }
+        });
+    }
+    ui.add_space(2.0);
+    if cr::secondary_button(ui, look, tr("Try again"), true).clicked() {
+        retry = true;
+    }
+    retry
+}
+
+/// Open Apple's installer for the command line tools. It is a window of its own and the call
+/// returns at once; waiting for it happens off the UI thread so no process is left behind.
+fn install_xcode_tools() {
+    let _ = std::thread::Builder::new()
+        .name("codigo-xcode-select".into())
+        .spawn(|| {
+            let _ = std::process::Command::new("xcode-select")
+                .arg("--install")
+                .status();
+        });
 }
 
 pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
@@ -425,6 +517,9 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
                         .size(font_size::SMALL)
                         .color(color(p.status_danger_fg)),
                 );
+            }
+            if let Some(m) = &d.missing {
+                outcome.retry = missing_view(ui, look, m);
             }
         }
         Phase::Preparing => {

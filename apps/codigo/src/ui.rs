@@ -482,7 +482,8 @@ fn sidebar_content(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>)
             (Panel::Quality, "shield-check", tr("Quality")),
             (Panel::Problems, "warning", tr("Problems")),
             (Panel::Git, "branch", tr("Source control")),
-            (Panel::GitHub, "cloud", tr("GitHub")),
+            (Panel::GitHub, "brand-github", tr("GitHub")),
+            (Panel::GitLab, "brand-gitlab", tr("GitLab")),
             (Panel::Debug, "bug", tr("Debug")),
             (Panel::Assistant, "sparkle", tr("Assistant")),
         ] {
@@ -509,6 +510,7 @@ fn sidebar_content(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>)
                 Panel::Debug => tr("Debug"),
                 Panel::Git => tr("Source control"),
                 Panel::GitHub => tr("GitHub"),
+                Panel::GitLab => tr("GitLab"),
                 Panel::Assistant => tr("Assistant"),
             },
             |_| {},
@@ -531,12 +533,17 @@ fn sidebar_content(ui: &mut Ui, app: &mut App, look: &Look, acts: &mut Vec<Act>)
         Panel::GitHub => {
             crate::github_ui::panel(ui, app, look);
         }
+        Panel::GitLab => crate::gitlab_ui::panel(ui, app, look),
         Panel::Assistant => {
             crate::ai_ui::panel(ui, app, look);
         }
         Panel::Debug => {
-            if let Some((path, line)) = crate::debug_ui::panel(ui, app, look).open {
+            let outcome = crate::debug_ui::panel(ui, app, look);
+            if let Some((path, line)) = outcome.open {
                 acts.push(Act::OpenAt { path, line });
+            }
+            if outcome.retry {
+                crate::debug_ui::start(app);
             }
         }
         Panel::Quality => {

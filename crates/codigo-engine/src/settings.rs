@@ -77,6 +77,8 @@ pub struct Settings {
     pub ui_scale: f32,
     /// The program the terminal starts; empty for the login shell.
     pub terminal_shell: String,
+    /// The GitLab server the GitLab panel talks to (`gitlab.com` or a self-hosted one).
+    pub gitlab_host: String,
     pub word_wrap: bool,
     pub line_numbers: bool,
     pub highlight_active_line: bool,
@@ -124,6 +126,7 @@ impl Default for Settings {
             indent_guides: false,
             ui_scale: 1.0,
             terminal_shell: String::new(),
+            gitlab_host: "gitlab.com".to_owned(),
             word_wrap: false,
             line_numbers: true,
             highlight_active_line: true,
@@ -175,6 +178,10 @@ impl Settings {
             .trim()
             .to_owned();
         self.terminal_shell = self.terminal_shell.trim().chars().take(500).collect();
+        self.gitlab_host = self.gitlab_host.trim().to_ascii_lowercase();
+        if self.gitlab_host.is_empty() || self.gitlab_host.len() > 253 {
+            self.gitlab_host = "gitlab.com".to_owned();
+        }
         if self.color_theme != crate::theme::NODALIA
             && crate::theme::preset(&self.color_theme).is_none()
         {

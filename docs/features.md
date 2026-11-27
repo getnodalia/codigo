@@ -75,6 +75,21 @@ service or tool, it says so.
   diff a click on a line's number opens a comment on that line (shown as a dot, with its thread
   and a box to reply). Both go through the GitHub API and have not been run against a real
   repository either.
+- **GitLab, in the window.** The GitLab panel (`Ctrl+Alt+L`, GitLab menu) works like the GitHub one
+  for gitlab.com or your own GitLab server (set in Preferences ▸ Accounts): the open merge requests
+  and issues of the project you are in, the merge requests you opened or that wait for your review,
+  and your projects. A merge request opens in its own window with its description, pipeline status,
+  changed files with their diffs and the conversation, and you can comment on it, approve it or
+  open it on GitLab; *Create a merge request…* pushes the current branch and opens one from it, and
+  *Clone a GitLab project…* takes an address or `group/project`. Sign in with a personal access
+  token (the `api` scope; the panel links to the page that creates it): the token is kept in the
+  system's keyring, one entry per server, is sent only to that server over HTTPS and is never
+  written to a file. Pushing, pulling and cloning a project on the server you are signed in to use
+  the same token. The GitHub and GitLab tabs and menus carry the services' own marks, drawn in the
+  colour of the interface. Tried: signing in with a wrong token against the real gitlab.com (it says
+  so), reading public projects, the address and remote parsing, and the token never appearing in an
+  error. Not run against a real account: the lists, comments, approvals, creating a merge request,
+  the keyring and cloning a private project.
 - **Code quality and security, built in.** The Quality tab (`Ctrl+Shift+Y`) analyses the folder
   with no server to run and nothing leaving your computer: hard-coded secrets (private keys,
   cloud tokens, passwords), unsafe patterns (`eval`, shell commands from strings, SQL built from

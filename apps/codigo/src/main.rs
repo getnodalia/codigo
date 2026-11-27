@@ -18,6 +18,7 @@
 mod ai_ui;
 mod app;
 mod blame_ui;
+mod brand;
 mod chrome;
 mod conflict_ui;
 mod debug_ui;
@@ -27,6 +28,7 @@ mod explorer;
 mod file_icons;
 mod fonts;
 mod github_ui;
+mod gitlab_ui;
 mod glyphs;
 mod i18n;
 mod icon;

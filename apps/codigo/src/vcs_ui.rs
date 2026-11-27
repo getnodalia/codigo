@@ -28,7 +28,9 @@ pub enum GitMsg {
         dir: PathBuf,
         repo: Option<PathBuf>,
         remote: Option<(String, String)>,
-        result: Result<RepoStatus, String>,
+        /// The address of `origin`, as the repository spells it.
+        origin: Option<String>,
+        result: Box<Result<RepoStatus, String>>,
         log: Vec<Commit>,
         stashes: Vec<Stash>,
         merging: bool,
@@ -113,6 +115,9 @@ impl BranchSetup {
 }
 
 pub fn auth(app: &App) -> Auth {
+    if let Some(auth) = crate::gitlab_ui::auth(app) {
+        return auth;
+    }
     match &app.gh.token {
         Some(t) => Auth::GitHubToken(t.clone()),
         None => Auth::None,
@@ -146,16 +151,16 @@ pub fn refresh(app: &mut App) {
                 dir,
                 repo: None,
                 remote: None,
-                result: Err(String::new()),
+                origin: None,
+                result: Box::new(Err(String::new())),
                 log: Vec::new(),
                 stashes: Vec::new(),
                 merging: false,
             };
         };
-        let remote = repo
-            .remote_url("origin")
-            .and_then(|u| codigo_github::parse_remote(&u));
-        let result = repo.status().map_err(|e| e.to_string());
+        let origin = repo.remote_url("origin");
+        let remote = origin.as_deref().and_then(codigo_github::parse_remote);
+        let result = Box::new(repo.status().map_err(|e| e.to_string()));
         let log = repo.log(30).unwrap_or_default();
         let stashes = repo.stashes().unwrap_or_default();
         let merging = repo.merging();
@@ -164,6 +169,7 @@ pub fn refresh(app: &mut App) {
             dir,
             repo: Some(repo.root().to_path_buf()),
             remote,
+            origin,
             result,
             log,
             stashes,
@@ -230,6 +236,7 @@ pub fn on_msg(app: &mut App, msg: GitMsg) {
             dir,
             repo,
             remote,
+            origin,
             result,
             log,
             stashes,
@@ -242,7 +249,8 @@ pub fn on_msg(app: &mut App, msg: GitMsg) {
             app.vcs.for_dir = Some(dir);
             app.vcs.root = repo;
             app.gh.repo = remote;
-            match result {
+            crate::gitlab_ui::set_origin(app, origin);
+            match *result {
                 Ok(status) => {
                     app.vcs.status = Some(status);
                     app.vcs.error = None;

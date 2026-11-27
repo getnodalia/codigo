@@ -55,6 +55,16 @@ pub enum Tab {
 impl Tab {
     const ALL: [Tab; 5] = [Tab::Pulls, Tab::Issues, Tab::Mine, Tab::Review, Tab::Repos];
 
+    fn icon(self) -> &'static str {
+        match self {
+            Tab::Pulls => "branch",
+            Tab::Issues => "info",
+            Tab::Mine => "user",
+            Tab::Review => "check-square",
+            Tab::Repos => "book",
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Tab::Pulls => "Pull requests",
@@ -264,11 +274,14 @@ pub struct CloneSetup {
     pub focus: bool,
     pub busy: bool,
     pub error: Option<String>,
+    /// The GitLab server `owner/name` is read against; `None` for GitHub.
+    pub gitlab: Option<String>,
 }
 
 impl CloneSetup {
     pub fn new(_app: &App, url: String) -> CloneSetup {
         CloneSetup {
+            gitlab: None,
             url,
             parent: default_parent(),
             focus: true,
@@ -278,7 +291,7 @@ impl CloneSetup {
     }
 }
 
-fn default_parent() -> String {
+pub(crate) fn default_parent() -> String {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
@@ -295,7 +308,8 @@ fn default_parent() -> String {
 }
 
 /// What `owner/name` or a full address means as an address git can clone.
-pub fn clone_address(input: &str) -> String {
+/// [`clone_address`] for a short `group/project` on any server.
+pub fn clone_address_on(input: &str, host: &str) -> String {
     let t = input.trim();
     let short = !t.is_empty()
         && !t.contains("://")
@@ -306,7 +320,7 @@ pub fn clone_address(input: &str) -> String {
         && !t.ends_with('/')
         && !t.starts_with('-');
     if short {
-        format!("https://github.com/{t}.git")
+        format!("https://{host}/{t}.git")
     } else {
         t.to_owned()
     }
@@ -779,7 +793,7 @@ pub fn on_msg(app: &mut App, msg: GhMsg) {
     }
 }
 
-fn first_line(text: &str) -> String {
+pub(crate) fn first_line(text: &str) -> String {
     text.lines()
         .find(|l| !l.trim().is_empty())
         .unwrap_or(text)
@@ -787,7 +801,7 @@ fn first_line(text: &str) -> String {
         .to_owned()
 }
 
-fn date(stamp: &str) -> &str {
+pub(crate) fn date(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
 
@@ -877,10 +891,10 @@ fn post_inline(app: &mut App, view: &ItemView, body: String) {
 }
 
 fn start_clone(app: &mut App, url: String, parent: String) {
-    let auth = match &app.gh.token {
+    let auth = crate::gitlab_ui::auth_for_url(app, &url).unwrap_or_else(|| match &app.gh.token {
         Some(t) => Auth::GitHubToken(t.clone()),
         None => Auth::None,
-    };
+    });
     spawn(app, move || {
         let name = codigo_git::folder_name(&url);
         let result = codigo_git::clone(&url, std::path::Path::new(&parent), &name, &auth)
@@ -931,14 +945,8 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         for tab in Tab::ALL {
-            if crate::widgets::toggle_chip(
-                ui,
-                look,
-                tr(tab.label()),
-                tr(tab.label()),
-                app.gh.tab == tab,
-            )
-            .clicked()
+            if crate::widgets::tab_chip(ui, look, tab.icon(), tr(tab.label()), app.gh.tab == tab)
+                .clicked()
             {
                 app.gh.tab = tab;
                 ensure(app);
@@ -1144,7 +1152,7 @@ fn state_tint(look: &Look, state: &str, draft: bool) -> egui::Color32 {
     })
 }
 
-fn row_frame(ui: &mut Ui, look: &Look, add: impl FnOnce(&mut Ui)) -> bool {
+pub(crate) fn row_frame(ui: &mut Ui, look: &Look, add: impl FnOnce(&mut Ui)) -> bool {
     let p = look.palette;
     let response = ui
         .scope(|ui| {
@@ -1864,7 +1872,7 @@ pub fn pull_overlay(
 }
 
 /// At most `max` characters of a text, cut on a character boundary.
-fn clip(text: &str, max: usize) -> String {
+pub(crate) fn clip(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_owned();
     }
@@ -1885,14 +1893,19 @@ pub fn clone_overlay(
     let mut closed = false;
     let mut go = false;
     let mut browse = false;
-    let address = clone_address(&state.url);
+    let on = state.gitlab.clone();
+    let address = clone_address_on(&state.url, on.as_deref().unwrap_or("github.com"));
     let name = codigo_git::folder_name(&address);
     let dismissed = modal(ctx, look, "clone", 560.0, true, |ui| {
         closed = heading(ui, look, tr("Clone a repository"), "clone");
         ui.label(
-            RichText::new(tr("Address, or owner/name on GitHub"))
-                .size(font_size::SMALL)
-                .color(color(p.text_secondary)),
+            RichText::new(if on.is_some() {
+                tr("Address, or group/project on GitLab")
+            } else {
+                tr("Address, or owner/name on GitHub")
+            })
+            .size(font_size::SMALL)
+            .color(color(p.text_secondary)),
         );
         let response = cr::field_frame(look)
             .inner_margin(egui::Margin::symmetric(10, 4))
@@ -1900,7 +1913,11 @@ pub fn clone_overlay(
                 ui.add(
                     egui::TextEdit::singleline(&mut state.url)
                         .frame(egui::Frame::NONE)
-                        .hint_text("getnodalia/codigo")
+                        .hint_text(if on.is_some() {
+                            "group/project"
+                        } else {
+                            "getnodalia/codigo"
+                        })
                         .align(Align2::LEFT_CENTER)
                         .desired_width(f32::INFINITY)
                         .font(FontId::proportional(font_size::LARGE)),
@@ -1992,12 +2009,20 @@ mod tests {
     #[test]
     fn owner_and_name_become_an_https_address() {
         assert_eq!(
-            clone_address("getnodalia/codigo"),
+            clone_address_on("getnodalia/codigo", "github.com"),
             "https://github.com/getnodalia/codigo.git"
         );
         assert_eq!(
-            clone_address("  getnodalia/codigo \n"),
+            clone_address_on("  getnodalia/codigo \n", "github.com"),
             "https://github.com/getnodalia/codigo.git"
+        );
+    }
+
+    #[test]
+    fn a_short_name_on_gitlab_uses_that_server() {
+        assert_eq!(
+            clone_address_on("group/sub", "gitlab.example.org"),
+            "https://gitlab.example.org/group/sub.git"
         );
     }
 
@@ -2011,7 +2036,7 @@ mod tests {
             "/a",
             "a b/c",
         ] {
-            assert_eq!(clone_address(s), s.trim(), "{s}");
+            assert_eq!(clone_address_on(s, "github.com"), s.trim(), "{s}");
         }
     }
 
