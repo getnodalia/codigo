@@ -109,4 +109,12 @@ service or tool, it says so.
 - **Nodalia Design.** Light, dark and high-contrast themes, round window controls on Linux (native
   ones on macOS and Windows), a global menu over D-Bus on Linux, a reduced-motion option and an
   in-app update check.
+- **Make it look the way you want.** Preferences is a large window with categories and a search
+  that looks through every setting. Pick a colour theme (Nodalia, which follows the window, or
+  Dracula, One Dark, Monokai, Solarized, GitHub, Nord, Gruvbox, Tokyo Night and Catppuccin), then
+  change any single colour of the editor or of each kind of code; the code font (any font installed
+  on the computer), its size and line height; the cursor (line, block or underline, blinking or
+  not); rulers and indent guides; the interface zoom; the terminal's shell; auto save and what is
+  cleaned on save. A live preview shows each change as you make it. Not done yet: importing a
+  VS Code theme, per-language settings and a keybindings editor.
 - **Spanish and English**, following your system language or your choice in Preferences.

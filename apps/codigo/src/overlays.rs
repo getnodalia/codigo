@@ -2,7 +2,7 @@
 //! Everything that opens over the editor: the command palette, Go to file, Go to line, the
 //! language picker, Preferences, Keyboard shortcuts, About and the confirmations.
 
-use codigo_engine::{Appearance, AutoSave, Category, Cmd};
+use codigo_engine::{Category, Cmd};
 use codigo_workspace::{rank, Ranked};
 use egui::text::LayoutJob;
 use egui::{
@@ -14,7 +14,7 @@ use nodalia_theme::font_size;
 use nodalia_theme::for_egui::color;
 
 use crate::app::App;
-use crate::i18n::{self, tr, trf, Lang};
+use crate::i18n::{tr, trf};
 
 #[derive(Default)]
 pub struct Picker {
@@ -40,7 +40,7 @@ pub enum Overlay {
     QuickOpen(Picker),
     GoToLine(String),
     Language(Picker),
-    Preferences,
+    Preferences(Box<crate::prefs_ui::PrefsState>),
     NewApp(crate::nodalia_ui::NewApp),
     Shortcuts(String),
     About,
@@ -267,7 +267,7 @@ pub fn show(ctx: &egui::Context, app: &mut App, look: &Look) {
         Overlay::QuickOpen(picker) => quick_open(ctx, app, look, picker),
         Overlay::GoToLine(text) => go_to_line(ctx, app, look, text),
         Overlay::Language(picker) => language(ctx, app, look, picker),
-        Overlay::Preferences => preferences(ctx, app, look),
+        Overlay::Preferences(st) => crate::prefs_ui::overlay(ctx, app, look, st),
         Overlay::NewApp(state) => crate::nodalia_ui::new_app(ctx, app, look, state),
         Overlay::Shortcuts(filter) => shortcuts(ctx, look, filter),
         Overlay::About => about_window(ctx, look),
@@ -512,140 +512,6 @@ fn section(ui: &mut Ui, look: &Look, title: &str) {
             .color(color(look.palette.text_secondary)),
     );
     ui.add_space(4.0);
-}
-
-fn toggle_row(ui: &mut Ui, label: &str, value: &mut bool) -> bool {
-    ui.checkbox(value, label).changed()
-}
-
-fn preferences(ctx: &egui::Context, app: &mut App, look: &Look) -> Shown {
-    let mut changed = false;
-    let mut closed = modal(ctx, look, "preferences", 520.0, false, |ui| {
-        if heading(ui, look, tr("Preferences"), "prefs") {
-            ui.data_mut(|d| d.insert_temp(Id::unique("prefs-close"), true));
-        }
-        egui::ScrollArea::vertical()
-            .id_salt("prefs-scroll")
-            .max_height((ui.ctx().content_rect().height() - 180.0).max(200.0))
-            .show(ui, |ui| {
-                let s = &mut app.settings;
-                section(ui, look, tr("Appearance"));
-                ui.horizontal(|ui| {
-                    for (a, label) in [
-                        (Appearance::System, tr("System")),
-                        (Appearance::Light, tr("Light")),
-                        (Appearance::Dark, tr("Dark")),
-                    ] {
-                        if ui.selectable_label(s.appearance == a, label).clicked() {
-                            s.appearance = a;
-                            changed = true;
-                        }
-                    }
-                });
-                changed |= toggle_row(ui, tr("High contrast"), &mut s.high_contrast);
-                changed |= toggle_row(ui, tr("Reduce motion"), &mut s.reduced_motion);
-                if crate::chrome::NDL_CONTROLS_POSSIBLE {
-                    let mut system = s.native_window_controls;
-                    if toggle_row(ui, tr("Use the desktop's own window buttons"), &mut system) {
-                        s.native_window_controls = system;
-                        changed = true;
-                    }
-                }
-
-                section(ui, look, tr("Language"));
-                ui.horizontal(|ui| {
-                    for (code, label) in
-                        [("auto", tr("System")), ("es", "Español"), ("en", "English")]
-                    {
-                        if ui.selectable_label(s.language == code, label).clicked() {
-                            s.language = code.to_owned();
-                            i18n::set(Lang::from_setting(code));
-                            changed = true;
-                        }
-                    }
-                });
-
-                section(ui, look, tr("Editor"));
-                ui.horizontal(|ui| {
-                    ui.label(tr("Font size"));
-                    changed |= ui
-                        .add(egui::Slider::new(
-                            &mut s.font_size,
-                            codigo_engine::settings::MIN_FONT_SIZE
-                                ..=codigo_engine::settings::MAX_FONT_SIZE,
-                        ))
-                        .changed();
-                });
-                changed |= toggle_row(ui, tr("Word wrap"), &mut s.word_wrap);
-                changed |= toggle_row(ui, tr("Line numbers"), &mut s.line_numbers);
-                changed |= toggle_row(
-                    ui,
-                    tr("Highlight the current line"),
-                    &mut s.highlight_active_line,
-                );
-                changed |= toggle_row(ui, tr("Show whitespace"), &mut s.show_whitespace);
-                changed |= toggle_row(ui, tr("Show who changed the line"), &mut s.blame);
-                changed |= toggle_row(ui, tr("Show the minimap"), &mut s.minimap);
-                changed |= toggle_row(
-                    ui,
-                    tr("Close brackets and quotes automatically"),
-                    &mut s.auto_close_pairs,
-                );
-
-                section(ui, look, tr("Saving"));
-                changed |= toggle_row(
-                    ui,
-                    tr("Trim trailing whitespace on save"),
-                    &mut s.trim_trailing_whitespace_on_save,
-                );
-                changed |= toggle_row(
-                    ui,
-                    tr("Insert a final newline on save"),
-                    &mut s.insert_final_newline_on_save,
-                );
-                ui.horizontal(|ui| {
-                    ui.label(tr("Auto save"));
-                    for (a, label) in [
-                        (AutoSave::Off, tr("Off")),
-                        (AutoSave::OnFocusLoss, tr("When the window loses focus")),
-                        (AutoSave::AfterDelay, tr("After a delay")),
-                    ] {
-                        if ui.selectable_label(s.auto_save == a, label).clicked() {
-                            s.auto_save = a;
-                            changed = true;
-                        }
-                    }
-                });
-
-                section(ui, look, tr("Language servers"));
-                changed |= toggle_row(
-                    ui,
-                    tr("Use language servers for diagnostics when one is installed"),
-                    &mut s.language_servers,
-                );
-
-                section(ui, look, tr("Updates"));
-                changed |= toggle_row(
-                    ui,
-                    tr("Check for updates when Código starts"),
-                    &mut s.check_updates,
-                );
-            });
-    });
-    if ctx
-        .data_mut(|d| d.remove_temp::<bool>(Id::unique("prefs-close")))
-        .unwrap_or(false)
-    {
-        closed = true;
-    }
-    if changed {
-        app.save_settings();
-    }
-    if closed {
-        (Overlay::None, true)
-    } else {
-        (Overlay::Preferences, false)
-    }
 }
 
 fn shortcuts(ctx: &egui::Context, look: &Look, mut filter: String) -> Shown {

@@ -16,5 +16,5 @@ pub mod keys;
 pub mod links;
 mod terminal;
 
-pub use terminal::{shell_command, Spec, Status, TermError, Terminal, Waker};
+pub use terminal::{shell_command, shell_command_with, Spec, Status, TermError, Terminal, Waker};
 pub use vt100::{Cell, Color, Screen};

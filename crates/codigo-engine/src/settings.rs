@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The user's preferences, saved as JSON.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,23 @@ pub enum AutoSave {
     AfterDelay,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CursorStyle {
+    #[default]
+    Line,
+    Block,
+    Underline,
+}
+
+pub const MIN_LINE_HEIGHT: f32 = 1.1;
+pub const MAX_LINE_HEIGHT: f32 = 2.4;
+pub const MIN_UI_SCALE: f32 = 0.75;
+pub const MAX_UI_SCALE: f32 = 2.0;
+/// How many ruler columns, and how far right, a settings file may ask for.
+const MAX_RULERS: usize = 8;
+const MAX_RULER_COLUMN: u16 = 500;
+const MAX_OVERRIDES: usize = 64;
 pub const MIN_FONT_SIZE: f32 = 8.0;
 pub const MAX_FONT_SIZE: f32 = 40.0;
 const MAX_RECENT: usize = 12;
@@ -41,6 +59,24 @@ pub struct Settings {
     /// `auto` follows the system; otherwise a language code such as `es` or `en`.
     pub language: String,
     pub font_size: f32,
+    /// The code font's family name; empty for the built-in one.
+    pub font_family: String,
+    /// Row height as a multiple of the font size.
+    pub line_height: f32,
+    /// The id of a colour theme (`nodalia` follows the window's own colours).
+    pub color_theme: String,
+    /// Colours the person changed on top of the theme, keyed by slot (`syntax.keyword`) and
+    /// written as `#rrggbb`.
+    pub color_overrides: BTreeMap<String, String>,
+    pub cursor_style: CursorStyle,
+    pub cursor_blink: bool,
+    /// Columns where a thin vertical line is drawn.
+    pub rulers: Vec<u16>,
+    pub indent_guides: bool,
+    /// How much bigger or smaller the whole window is drawn.
+    pub ui_scale: f32,
+    /// The program the terminal starts; empty for the login shell.
+    pub terminal_shell: String,
     pub word_wrap: bool,
     pub line_numbers: bool,
     pub highlight_active_line: bool,
@@ -78,6 +114,16 @@ impl Default for Settings {
             appearance: Appearance::System,
             language: "auto".into(),
             font_size: 14.0,
+            font_family: String::new(),
+            line_height: 1.55,
+            color_theme: crate::theme::NODALIA.into(),
+            color_overrides: BTreeMap::new(),
+            cursor_style: CursorStyle::Line,
+            cursor_blink: true,
+            rulers: Vec::new(),
+            indent_guides: false,
+            ui_scale: 1.0,
+            terminal_shell: String::new(),
             word_wrap: false,
             line_numbers: true,
             highlight_active_line: true,
@@ -111,6 +157,39 @@ impl Settings {
         } else {
             14.0
         };
+        let clamp = |v: f32, lo: f32, hi: f32, default: f32| {
+            if v.is_finite() {
+                v.clamp(lo, hi)
+            } else {
+                default
+            }
+        };
+        self.line_height = clamp(self.line_height, MIN_LINE_HEIGHT, MAX_LINE_HEIGHT, 1.55);
+        self.ui_scale = clamp(self.ui_scale, MIN_UI_SCALE, MAX_UI_SCALE, 1.0);
+        self.font_family = self
+            .font_family
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(120)
+            .collect::<String>()
+            .trim()
+            .to_owned();
+        self.terminal_shell = self.terminal_shell.trim().chars().take(500).collect();
+        if self.color_theme != crate::theme::NODALIA
+            && crate::theme::preset(&self.color_theme).is_none()
+        {
+            self.color_theme = crate::theme::NODALIA.into();
+        }
+        self.color_overrides.retain(|k, v| {
+            crate::theme::Slot::from_key(k).is_some() && crate::theme::Rgb::parse(v).is_some()
+        });
+        while self.color_overrides.len() > MAX_OVERRIDES {
+            self.color_overrides.pop_last();
+        }
+        self.rulers.retain(|c| (1..=MAX_RULER_COLUMN).contains(c));
+        self.rulers.sort_unstable();
+        self.rulers.dedup();
+        self.rulers.truncate(MAX_RULERS);
         self.auto_save_delay_ms = self.auto_save_delay_ms.clamp(200, 60_000);
         if self.language.trim().is_empty() {
             self.language = "auto".into();
@@ -217,6 +296,48 @@ mod tests {
         assert_eq!(Settings::load_from(&p), Settings::default());
         assert!(!p.exists());
         assert!(d.path().join("s.json.bad").exists());
+    }
+
+    #[test]
+    fn appearance_values_are_repaired() {
+        let mut s = Settings {
+            line_height: f32::INFINITY,
+            ui_scale: 9.0,
+            font_family: "  Fira\u{0}Code \n".into(),
+            color_theme: "no-such-theme".into(),
+            rulers: vec![120, 0, 80, 80, 9999, 100],
+            ..Settings::default()
+        };
+        s.color_overrides
+            .insert("syntax.keyword".into(), "#ff0000".into());
+        s.color_overrides
+            .insert("syntax.keyword2".into(), "#00ff00".into());
+        s.color_overrides
+            .insert("editor.text".into(), "banana".into());
+        s.sanitize();
+        assert_eq!(s.line_height, 1.55);
+        assert_eq!(s.ui_scale, MAX_UI_SCALE);
+        assert_eq!(s.font_family, "FiraCode");
+        assert_eq!(s.color_theme, "nodalia");
+        assert_eq!(s.rulers, vec![80, 100, 120]);
+        assert_eq!(s.color_overrides.len(), 1);
+        assert!(s.color_overrides.contains_key("syntax.keyword"));
+    }
+
+    #[test]
+    fn a_known_theme_and_its_overrides_survive_a_round_trip() {
+        let d = tempfile::tempdir().expect("tempdir");
+        let p = d.path().join("s.json");
+        let mut s = Settings {
+            color_theme: "dracula".into(),
+            cursor_style: CursorStyle::Block,
+            rulers: vec![100],
+            ..Settings::default()
+        };
+        s.color_overrides
+            .insert("editor.background".into(), "#101010".into());
+        s.save_to(&p).expect("save");
+        assert_eq!(Settings::load_from(&p), s);
     }
 
     #[test]
