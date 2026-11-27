@@ -107,6 +107,9 @@ pub struct Settings {
     pub ai_model: String,
     /// Where the provider is; empty for its usual address.
     pub ai_base_url: String,
+    /// Send the open file, the selection and an outline of the folder along with each question,
+    /// so the assistant can see the code it is asked about.
+    pub ai_context: bool,
     pub recent_projects: Vec<PathBuf>,
 }
 
@@ -146,6 +149,7 @@ impl Default for Settings {
             ai_provider: "anthropic".into(),
             ai_model: String::new(),
             ai_base_url: String::new(),
+            ai_context: true,
             recent_projects: Vec::new(),
         }
     }

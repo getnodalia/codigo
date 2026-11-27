@@ -1391,12 +1391,7 @@ pub fn item_overlay(
                 }
                 if !view.body.trim().is_empty() {
                     ui.add_space(8.0);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(clip(&view.body, 6000)).color(color(p.text_primary)),
-                        )
-                        .wrap(),
-                    );
+                    crate::markdown::show(ui, look, &clip(&view.body, 6000));
                 }
                 let loaded = view.loaded.take();
                 match &loaded {
@@ -1463,13 +1458,7 @@ pub fn item_overlay(
                                     .color(color(p.text_secondary)),
                             );
                             if !c.body.trim().is_empty() {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(clip(&c.body, 4000))
-                                            .color(color(p.text_primary)),
-                                    )
-                                    .wrap(),
-                                );
+                                crate::markdown::show(ui, look, &clip(&c.body, 4000));
                             }
                         }
                     }
@@ -1658,10 +1647,7 @@ fn review_diff(
                 .strong()
                 .color(color(p.text_secondary)),
         );
-        ui.add(
-            egui::Label::new(RichText::new(clip(&c.body, 4000)).color(color(p.text_primary)))
-                .wrap(),
-        );
+        crate::markdown::show(ui, look, &clip(&c.body, 4000));
         if c.reply_to.is_none() && ui.small_button(tr("Reply")).clicked() {
             view.reply_to = Some(c.id);
         }

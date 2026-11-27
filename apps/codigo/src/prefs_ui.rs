@@ -1266,6 +1266,14 @@ fn tools(ui: &mut Ui, env: &mut Env, cx: &mut Cx) {
     if open {
         env.action = Some(Action::OpenAssistant);
     }
+    env.changed |= row(
+        cx,
+        ui,
+        look,
+        "Let the assistant see the open file and the project",
+        "Sends the file in the editor, your selection and the folder's file list with each question, so it can answer about your code and propose changes. Off: only what you type is sent.",
+        |ui| switch(ui, &mut s.ai_context),
+    );
     section(cx, "Updates");
     env.changed |= row(
         cx,

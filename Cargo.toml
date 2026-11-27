@@ -18,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.91"
 license = "MIT OR Apache-2.0"
@@ -48,6 +48,7 @@ ignore = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+pulldown-cmark = { version = "0.13", default-features = false }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 directories = "6"

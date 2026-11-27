@@ -7,7 +7,7 @@ file lists what exists and what does not. Nothing under "Next" is available yet.
 
 Editor core (multi-cursor, find and replace, word wrap, undo, encodings), tree-sitter highlighting
 for 15 languages, explorer with git status, quick open, project search, command palette, session
-restore, language server diagnostics, hover, completion, go to definition, references, rename and format, snippets, a minimap and a split editor, the Engineering suite look (IBM Plex type and shared panels), a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub and GitLab in the window (clone, pull requests and merge requests, issues and reviews, with the services' own marks), a large Preferences window with colour themes and fonts, files that open at once, Run and Debug in any project, AI assistants (chat, explain, fix, refactor, document and tests through Anthropic, OpenAI, Ollama or a compatible server, keys in the keyring), stash, merge and conflict resolution, staging by hunk, blame at the end of the line, creating a pull request and comments on a diff line, a Windows installer (MSI), code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
+restore, language server diagnostics, hover, completion, go to definition, references, rename and format, snippets, a minimap and a split editor, the Engineering suite look (IBM Plex type and shared panels), a drawn symbol per file type in the explorer and tabs, a terminal and run console with Run, Stop and Terminal buttons in the top bar, a Problems panel, a debugger (breakpoints, stepping, stack, variables and evaluation through `lldb-dap`, GDB, `dlv` and `debugpy`), Git in the window (changes, diffs, stage, commit, branches, fetch, pull, push), GitHub and GitLab in the window (clone, pull requests and merge requests, issues and reviews, with the services' own marks), a large Preferences window with colour themes and fonts, files that open at once, Run and Debug in any project, AI assistants (chat that sees your code and proposes edits you accept or reject, explain, fix, refactor, document and tests through Anthropic, OpenAI, Ollama or a compatible server, keys in the keyring), stash, merge and conflict resolution, staging by hunk, blame at the end of the line, creating a pull request and comments on a diff line, a Windows installer (MSI), code quality and security analysis, a New Nodalia app template, Spanish and English, Nodalia Design themes, Linux global menu, update check.
 
 ## Next, in this order
 
@@ -31,11 +31,12 @@ restore, language server diagnostics, hover, completion, go to definition, refer
    Spanish table complete, licence headers) exist. Still to do: more templates (GTK, a server),
    a component and theme preview, helpers for tokens and icons, and checks for the remaining
    rules (no unwrap in a crate without the lint, wasm builds, assets in `ATTRIBUTION.md`).
-5. **AI assistants** are in (chat about the file or selection, explain, fix, refactor, document and
-   write tests, applied as an undoable edit, with the provider and key chosen by the user and
-   the key kept in the system's keyring). Still to do: inline completions as you type, edits
-   across several files, review of a change for quality and security, and trying the real
-   Anthropic and OpenAI services and the keyring.
+5. **AI assistants** are in (chat that sees the open file, the selection, the open tabs and the
+   project's file list; `@file` mentions; edits proposed as a diff per file, with Apply, Reject and
+   Apply all, undoable in an open file; explain, fix, refactor, document and write tests; the
+   provider and key chosen by the user, the key kept in the system's keyring). Still to do:
+   inline completions as you type, an agent that runs tools and commands, review of a change for
+   quality and security, and trying the real Anthropic and OpenAI services and the keyring.
 6. **Git in the editor** is in (changes, diffs, stage by hunk, commit, branches, push and pull,
    stash, merge and conflict resolution, blame at the end of the line, and GitHub pull requests,
    issues, cloning, creating a pull request and line comments on a diff); still to do: trying the

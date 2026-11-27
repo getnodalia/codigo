@@ -8,6 +8,10 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use std::path::PathBuf;
+
+use codigo_ai::context::{self, Active, Context};
+use codigo_ai::edits::{self, Change, FileEdit, Locate};
 use codigo_ai::prompts::{self, Task};
 use codigo_ai::{Config, Message, Provider};
 use codigo_engine::DocId;
@@ -42,7 +46,26 @@ pub enum Who {
     Problem,
 }
 
+/// Where a proposed change stands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stand {
+    Pending,
+    Applied,
+    Rejected,
+    /// Why it could not be applied.
+    Failed(String),
+}
+
+/// A change the assistant proposed to a file, shown as a diff the person accepts or rejects.
+pub struct Proposal {
+    pub edit: FileEdit,
+    pub stand: Stand,
+}
+
 pub struct Turn {
+    /// Tells a turn apart when the list changes under an answer that is still on its way.
+    pub uid: u64,
+    pub edits: Vec<Proposal>,
     pub role: Who,
     /// What the panel shows.
     pub shown: String,
@@ -63,6 +86,14 @@ pub struct AiPanel {
     pub session_keys: HashMap<Provider, String>,
     pub focus: bool,
     pub scroll_down: bool,
+    next_uid: u64,
+}
+
+impl AiPanel {
+    fn fresh_uid(&mut self) -> u64 {
+        self.next_uid += 1;
+        self.next_uid
+    }
 }
 
 pub enum AiMsg {
@@ -76,6 +107,13 @@ pub enum AiMsg {
     /// A key was kept, or why not.
     KeyStored(Provider, String, Result<(), String>),
     KeyRemoved(Provider, Result<(), String>),
+    /// A file the assistant proposed was written, or why not.
+    Created {
+        uid: u64,
+        index: usize,
+        path: PathBuf,
+        result: Result<(), String>,
+    },
 }
 
 fn config(app: &App) -> Config {
@@ -147,7 +185,8 @@ pub fn task(app: &mut App, task: Task) {
     let shown = format!("{verb} {file}");
     let sent = prompts::ask(task, &file, language, &code);
     show(app);
-    send(app, shown, sent, Some(target));
+    let gathered = gather(app, &file);
+    send(app, shown, sent, Some(target), gathered);
 }
 
 /// What the person typed in the panel, with the selected code when they ticked the box.
@@ -179,16 +218,143 @@ fn ask_from_input(app: &mut App) {
         }
     }
     app.ai.input.clear();
-    send(app, typed, sent, target);
+    let gathered = gather(app, &typed);
+    send(app, typed, sent, target, gathered);
 }
 
-fn send(app: &mut App, shown: String, sent: String, target: Option<Target>) {
+/// What the assistant is told about the project, built on the UI thread from what is open now.
+struct Gathered {
+    context: Context,
+    /// Mentioned files that are not open: read from disk off the UI thread.
+    from_disk: Vec<(String, PathBuf)>,
+}
+
+/// The longest file name or path kept in the context line.
+const OPEN_TABS: usize = 20;
+
+fn gather(app: &App, typed: &str) -> Option<Gathered> {
+    if !app.settings.ai_context {
+        return None;
+    }
+    let root = app.project.as_ref().map(|p| p.root.clone());
+    let files: Vec<String> = app
+        .files
+        .as_ref()
+        .map(|(_, f)| f.as_ref().clone())
+        .unwrap_or_default();
+    let relative = |path: &std::path::Path| -> String {
+        root.as_ref()
+            .and_then(|r| path.strip_prefix(r).ok())
+            .map_or_else(
+                || path.display().to_string(),
+                |p| p.to_string_lossy().replace('\\', "/"),
+            )
+    };
+    let active = app.tabs.get(app.active).map(|tab| {
+        let b = tab.doc.buffer();
+        let sel = b.primary();
+        let len = b.len_chars();
+        // A huge file goes as the stretch around the caret, not whole.
+        let (text, base) = if len <= 400_000 {
+            (b.slice(0..len), 0)
+        } else {
+            let lo = sel.head.saturating_sub(20_000);
+            (b.slice(lo..(sel.head + 20_000).min(len)), lo)
+        };
+        let selection = (sel.start() != sel.end() && sel.end() - sel.start() <= 40_000)
+            .then(|| (b.line_of(sel.start()) + 1, b.slice(sel.start()..sel.end())));
+        Active {
+            path: tab
+                .doc
+                .path()
+                .map_or_else(|| tab.doc.file_name().unwrap_or_default(), relative),
+            language: tab.doc.language().id.to_owned(),
+            text,
+            cursor_line: b.line_of(sel.head) - if base == 0 { 0 } else { b.line_of(base) } + 1,
+            selection,
+        }
+    });
+    let open: Vec<String> = app
+        .tabs
+        .iter()
+        .take(OPEN_TABS)
+        .filter_map(|t| t.doc.file_name())
+        .collect();
+    let mut attached = Vec::new();
+    let mut from_disk = Vec::new();
+    if let Some(root) = &root {
+        for rel in context::mentions(typed, &files) {
+            let abs = root.join(&rel);
+            match app
+                .tabs
+                .iter()
+                .find(|t| t.doc.path() == Some(abs.as_path()))
+            {
+                Some(tab) => {
+                    let b = tab.doc.buffer();
+                    attached.push((rel, b.slice(0..b.len_chars())));
+                }
+                None => from_disk.push((rel, abs)),
+            }
+        }
+    }
+    Some(Gathered {
+        context: Context {
+            project: root
+                .as_ref()
+                .and_then(|r| r.file_name())
+                .map(|n| n.to_string_lossy().into_owned()),
+            files,
+            open,
+            active,
+            attached,
+        },
+        from_disk,
+    })
+}
+
+/// A line saying what the next question will carry, so nothing is sent by surprise.
+fn context_line(app: &App) -> String {
+    if !app.settings.ai_context {
+        return tr("Only what you type is sent.").to_owned();
+    }
+    let mut parts = Vec::new();
+    if let Some(tab) = app.tabs.get(app.active) {
+        parts.push(
+            tab.doc
+                .file_name()
+                .unwrap_or_else(|| tr("Untitled").to_owned()),
+        );
+        let sel = tab.doc.buffer().primary();
+        if sel.start() != sel.end() {
+            parts.push(tr("the selection").to_owned());
+        }
+    }
+    if app.files.is_some() {
+        parts.push(tr("the project's file list").to_owned());
+    }
+    if parts.is_empty() {
+        return tr("Open a file and the assistant can see it.").to_owned();
+    }
+    trf("The assistant sees: {}.", &[&parts.join(" · ")])
+}
+
+fn send(
+    app: &mut App,
+    shown: String,
+    sent: String,
+    target: Option<Target>,
+    gathered: Option<Gathered>,
+) {
     if app.ai.busy {
         app.toast(tr("The assistant is still answering."));
         return;
     }
     let cfg = config(app);
+    let uid = app.ai.fresh_uid();
     app.ai.turns.push(Turn {
+        uid,
+        edits: Vec::new(),
         role: Who::User,
         shown,
         sent,
@@ -217,11 +383,26 @@ fn send(app: &mut App, shown: String, sent: String, target: Option<Target>) {
         } else {
             None
         };
+        let system = match gathered {
+            Some(mut g) => {
+                for (rel, abs) in g.from_disk {
+                    if let Ok(text) = std::fs::read_to_string(&abs) {
+                        g.context.attached.push((rel, text));
+                    }
+                }
+                let ctx = g.context.render();
+                if ctx.is_empty() {
+                    prompts::SYSTEM.to_owned()
+                } else {
+                    format!("{}\n\n{ctx}", prompts::SYSTEM)
+                }
+            }
+            None => prompts::SYSTEM.to_owned(),
+        };
         let result = if cfg.provider.needs_key() && key.is_none() {
             Err(tr("Add your API key in the assistant settings first.").to_owned())
         } else {
-            codigo_ai::complete(&cfg, key.as_deref(), prompts::SYSTEM, &messages)
-                .map_err(|e| e.to_string())
+            codigo_ai::complete(&cfg, key.as_deref(), &system, &messages).map_err(|e| e.to_string())
         };
         AiMsg::Reply {
             serial,
@@ -247,9 +428,28 @@ pub fn on_msg(app: &mut App, msg: AiMsg) {
                 Ok(t) => (t, Who::Assistant),
                 Err(e) => (e, Who::Problem),
             };
+            let proposals = if role == Who::Assistant {
+                edits::parse(&text)
+                    .into_iter()
+                    .map(|edit| Proposal {
+                        edit,
+                        stand: Stand::Pending,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let shown = if proposals.is_empty() {
+                text.clone()
+            } else {
+                edits::strip(&text)
+            };
+            let uid = app.ai.fresh_uid();
             app.ai.turns.push(Turn {
+                uid,
+                edits: proposals,
                 role,
-                shown: text.clone(),
+                shown,
                 sent: text,
                 target,
             });
@@ -274,6 +474,29 @@ pub fn on_msg(app: &mut App, msg: AiMsg) {
                         "No keyring is available: the key is kept until Código closes.",
                     ));
                 }
+            }
+        }
+        AiMsg::Created {
+            uid,
+            index,
+            path,
+            result,
+        } => {
+            let stand = match result {
+                Ok(()) => {
+                    app.open_path(&path, None, true);
+                    Stand::Applied
+                }
+                Err(e) => Stand::Failed(e),
+            };
+            if let Some(p) = app
+                .ai
+                .turns
+                .iter_mut()
+                .find(|t| t.uid == uid)
+                .and_then(|t| t.edits.get_mut(index))
+            {
+                p.stand = stand;
             }
         }
         AiMsg::KeyRemoved(provider, result) => {
@@ -335,6 +558,232 @@ fn apply(app: &mut App, turn: usize) {
     });
 }
 
+/// Put one proposed change into the project. Edits go through the open document, so Undo takes
+/// them back and nothing is saved until the person saves; a new file is written off the UI thread.
+fn apply_proposal(app: &mut App, turn: usize, index: usize) {
+    let Some((uid, edit)) = app
+        .ai
+        .turns
+        .get(turn)
+        .and_then(|t| Some((t.uid, t.edits.get(index)?.edit.clone())))
+    else {
+        return;
+    };
+    let result = place(app, uid, index, &edit);
+    if let Some(stand) = result {
+        if let Some(p) = app
+            .ai
+            .turns
+            .get_mut(turn)
+            .and_then(|t| t.edits.get_mut(index))
+        {
+            p.stand = stand;
+        }
+    }
+}
+
+/// `None` while a write is on its way; otherwise how the change ended.
+fn place(app: &mut App, uid: u64, index: usize, edit: &FileEdit) -> Option<Stand> {
+    let Some(root) = app.project.as_ref().map(|p| p.root.clone()) else {
+        return Some(Stand::Failed(tr("Open a folder first.").to_owned()));
+    };
+    let Some(rel) = edits::safe_relative(&edit.path) else {
+        return Some(Stand::Failed(
+            tr("That path is outside the project.").to_owned(),
+        ));
+    };
+    let abs = root.join(&rel);
+    match &edit.change {
+        Change::Create { content } => {
+            if abs.exists() {
+                return Some(Stand::Failed(tr("That file already exists.").to_owned()));
+            }
+            let content = content.clone();
+            let path = abs.clone();
+            spawn(app, move || {
+                let result = path
+                    .parent()
+                    .map_or(Ok(()), std::fs::create_dir_all)
+                    .and_then(|()| std::fs::write(&path, content))
+                    .map_err(|e| e.to_string());
+                AiMsg::Created {
+                    uid,
+                    index,
+                    path,
+                    result,
+                }
+            });
+            None
+        }
+        Change::Replace { search, replace } => {
+            Some(replace_in_open_file(app, &abs, search, replace))
+        }
+    }
+}
+
+fn replace_in_open_file(
+    app: &mut App,
+    abs: &std::path::Path,
+    search: &str,
+    replace: &str,
+) -> Stand {
+    if !abs.is_file() {
+        return Stand::Failed(tr("That file does not exist.").to_owned());
+    }
+    if !app.tabs.iter().any(|t| t.doc.path() == Some(abs)) {
+        app.open_path(abs, None, false);
+    }
+    let Some(i) = app.tabs.iter().position(|t| t.doc.path() == Some(abs)) else {
+        return Stand::Failed(tr("The file is still opening. Try again in a moment.").to_owned());
+    };
+    let Some(tab) = app.tabs.get_mut(i) else {
+        return Stand::Failed(tr("That file is closed.").to_owned());
+    };
+    let text = tab.doc.buffer().slice(0..tab.doc.buffer().len_chars());
+    let bytes = match edits::locate(&text, search) {
+        Ok(r) => r,
+        Err(Locate::Missing) => {
+            return Stand::Failed(
+                tr("The text to replace is not in the file any more. Ask again.").to_owned(),
+            )
+        }
+        Err(Locate::Ambiguous(n)) => {
+            return Stand::Failed(trf(
+                "The text to replace is in the file {} times, so it is not clear which one.",
+                &[&n.to_string()],
+            ))
+        }
+        Err(Locate::Empty) => {
+            return Stand::Failed(tr("The change has no text to replace.").to_owned())
+        }
+    };
+    let (Some(before), Some(inside)) = (text.get(..bytes.start), text.get(bytes.clone())) else {
+        return Stand::Failed(tr("The change could not be applied.").to_owned());
+    };
+    let start = before.chars().count();
+    let range = start..start + inside.chars().count();
+    let mut done = false;
+    tab.doc.apply(
+        |b| match b.apply_edits(vec![Edit::new(range.clone(), replace.to_owned())]) {
+            Some(changes) => {
+                done = true;
+                changes
+            }
+            None => Vec::new(),
+        },
+    );
+    if !done {
+        return Stand::Failed(tr("The change could not be applied.").to_owned());
+    }
+    let line = tab.doc.buffer().line_of(start);
+    app.open_path(abs, Some(line), true);
+    Stand::Applied
+}
+
+#[derive(Clone, Copy)]
+enum CardAct {
+    Apply,
+    Reject,
+}
+
+/// The most lines of a diff drawn in a card before it scrolls.
+const CARD_LINES: usize = 18;
+
+/// One proposed change as a card: the file, the lines taken out and put in, and its buttons.
+fn proposal_card(ui: &mut Ui, look: &Look, proposal: &Proposal) -> Option<CardAct> {
+    let p = look.palette;
+    let mut act = None;
+    ui.add_space(4.0);
+    egui::Frame::NONE
+        .fill(color(p.surface_raised))
+        .corner_radius(egui::CornerRadius::same(8))
+        .inner_margin(egui::Margin::same(8))
+        .show(ui, |ui| {
+            let (what, removed, added) = match &proposal.edit.change {
+                Change::Replace { search, replace } => {
+                    let (r, a) = edits::diff_lines(search, replace);
+                    (tr("Change"), r, a)
+                }
+                Change::Create { content } => {
+                    let (_, a) = edits::diff_lines("", content);
+                    (tr("New file"), Vec::new(), a)
+                }
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(what)
+                        .size(font_size::SMALL)
+                        .color(color(p.text_secondary)),
+                );
+                ui.label(
+                    RichText::new(&proposal.edit.path)
+                        .font(FontId::monospace(font_size::SMALL))
+                        .strong()
+                        .color(color(p.text_primary)),
+                );
+            });
+            ScrollArea::vertical()
+                .id_salt(("ai-diff", &proposal.edit.path, removed.len(), added.len()))
+                .max_height(CARD_LINES as f32 * 15.0)
+                .auto_shrink([true, true])
+                .show(ui, |ui| {
+                    for (mark, lines, ink) in [
+                        ("−", &removed, p.status_danger_fg),
+                        ("+", &added, p.status_success_fg),
+                    ] {
+                        for line in lines.iter().take(200) {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(format!("{mark} {line}"))
+                                        .font(FontId::monospace(font_size::SMALL))
+                                        .color(color(ink)),
+                                )
+                                .wrap_mode(egui::TextWrapMode::Extend),
+                            );
+                        }
+                    }
+                });
+            ui.add_space(2.0);
+            match &proposal.stand {
+                Stand::Pending => {
+                    ui.horizontal(|ui| {
+                        if cr::primary_button(ui, look, tr("Apply"), true).clicked() {
+                            act = Some(CardAct::Apply);
+                        }
+                        if cr::secondary_button(ui, look, tr("Reject"), true).clicked() {
+                            act = Some(CardAct::Reject);
+                        }
+                    });
+                }
+                Stand::Applied => {
+                    ui.label(
+                        RichText::new(tr("Applied. Undo brings the old code back."))
+                            .size(font_size::SMALL)
+                            .color(color(p.status_success_fg)),
+                    );
+                }
+                Stand::Rejected => {
+                    ui.label(
+                        RichText::new(tr("Rejected"))
+                            .size(font_size::SMALL)
+                            .color(color(p.text_tertiary)),
+                    );
+                }
+                Stand::Failed(why) => {
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(why)
+                                .size(font_size::SMALL)
+                                .color(color(p.status_danger_fg)),
+                        )
+                        .wrap(),
+                    );
+                }
+            }
+        });
+    act
+}
+
 pub struct Outcome {}
 
 pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
@@ -386,6 +835,7 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
     let height = (ui.available_height() - input_height).max(80.0);
     let mut apply_turn: Option<usize> = None;
     let mut copy: Option<String> = None;
+    let mut card_act: Option<(usize, usize, CardAct)> = None;
     ScrollArea::vertical()
         .id_salt("ai-turns")
         .max_height(height)
@@ -396,7 +846,7 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
                 ui.add(
                     egui::Label::new(
                         RichText::new(tr(
-                            "Ask about your code, or use the Assistant menu on a selection. Nothing is sent until you ask.",
+                            "Ask about your code, or use the Assistant menu on a selection. It can see the open file and propose changes you accept or reject. Mention a file with @name. Nothing is sent until you ask.",
                         ))
                         .size(font_size::SMALL)
                         .color(color(p.text_secondary)),
@@ -417,18 +867,37 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
                         .wrap(),
                 );
                 if turn.role == Who::Assistant {
-                    ui.horizontal(|ui| {
-                        if let Some(code) = prompts::first_code_block(&turn.sent) {
-                            if let Some(t) = &turn.target {
-                                if ui.small_button(trf("Apply to {}", &[&t.file])).clicked() {
-                                    apply_turn = Some(i);
-                                }
-                            }
-                            if ui.small_button(tr("Copy the code")).clicked() {
-                                copy = Some(code);
-                            }
+                    for (n, proposal) in turn.edits.iter().enumerate() {
+                        if let Some(act) = proposal_card(ui, look, proposal) {
+                            card_act = Some((i, n, act));
                         }
-                    });
+                    }
+                    let pending = turn
+                        .edits
+                        .iter()
+                        .filter(|p| p.stand == Stand::Pending)
+                        .count();
+                    if pending > 1
+                        && ui
+                            .small_button(trf("Apply all {} changes", &[&pending.to_string()]))
+                            .clicked()
+                    {
+                        card_act = Some((i, usize::MAX, CardAct::Apply));
+                    }
+                    if turn.edits.is_empty() {
+                        if let Some(code) = prompts::first_code_block(&turn.sent) {
+                            ui.horizontal(|ui| {
+                                if let Some(t) = &turn.target {
+                                    if ui.small_button(trf("Apply to {}", &[&t.file])).clicked() {
+                                        apply_turn = Some(i);
+                                    }
+                                }
+                                if ui.small_button(tr("Copy the code")).clicked() {
+                                    copy = Some(code);
+                                }
+                            });
+                        }
+                    }
                 }
             }
             if app.ai.busy {
@@ -438,6 +907,27 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
         });
     if let Some(i) = apply_turn {
         apply(app, i);
+    }
+    if let Some((turn, index, act)) = card_act {
+        let indexes: Vec<usize> = if index == usize::MAX {
+            app.ai.turns.get(turn).map_or_else(Vec::new, |t| {
+                (0..t.edits.len())
+                    .filter(|n| t.edits.get(*n).is_some_and(|p| p.stand == Stand::Pending))
+                    .collect()
+            })
+        } else {
+            vec![index]
+        };
+        for n in indexes {
+            match act {
+                CardAct::Apply => apply_proposal(app, turn, n),
+                CardAct::Reject => {
+                    if let Some(p) = app.ai.turns.get_mut(turn).and_then(|t| t.edits.get_mut(n)) {
+                        p.stand = Stand::Rejected;
+                    }
+                }
+            }
+        }
     }
     if let Some(code) = copy {
         app.egui_ctx().copy_text(code);
@@ -466,7 +956,14 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
     {
         send_now = true;
     }
-    ui.checkbox(&mut app.ai.with_selection, tr("Include the selected code"));
+    if !app.settings.ai_context {
+        ui.checkbox(&mut app.ai.with_selection, tr("Include the selected code"));
+    }
+    ui.label(
+        RichText::new(context_line(app))
+            .size(font_size::SMALL)
+            .color(color(p.text_secondary)),
+    );
     ui.horizontal(|ui| {
         let ready = !app.ai.input.trim().is_empty() && !app.ai.busy;
         if cr::primary_button(ui, look, tr("Send"), ready).clicked() {
@@ -475,9 +972,16 @@ pub fn panel(ui: &mut Ui, app: &mut App, look: &Look) -> Outcome {
     });
     if cfg.provider != Provider::Ollama {
         ui.label(
-            RichText::new(trf("Your question goes to {}.", &[cfg.provider.name()]))
-                .size(font_size::SMALL)
-                .color(color(p.text_tertiary)),
+            RichText::new(if app.settings.ai_context {
+                trf(
+                    "What is listed above goes to {} with your question.",
+                    &[cfg.provider.name()],
+                )
+            } else {
+                trf("Your question goes to {}.", &[cfg.provider.name()])
+            })
+            .size(font_size::SMALL)
+            .color(color(p.text_tertiary)),
         );
     }
     if send_now {
